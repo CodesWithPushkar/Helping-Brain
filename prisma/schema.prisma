@@ -17,10 +17,50 @@ model User{
   email String @unique
   name String
   sub String @unique
-  created_at String
-  updated_at String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
   picture_url String
+  workspace Workspace[]
 }
+
+model Workspace{
+  id Int @id @default(autoincrement())
+  name String
+  owner_id Int
+  owner User @relation(fields: [owner_id], references: [id])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  folder Folder[]
+  @@index([owner_id])
+}
+
+model Folder{
+  id Int @id @default(autoincrement())
+  name String
+  parent_folder_id Int?
+  parent Folder? @relation("FolderHierarchy", fields: [parent_folder_id], references: [id])
+  children Folder[] @relation("FolderHierarchy")
+  workspace_id Int
+  workspace  Workspace @relation(fields: [workspace_id], references: [id])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  notes Note[]
+  @@index([workspace_id])
+  @@index([parent_folder_id])
+}
+
+model Note{
+  id Int @id @default(autoincrement())
+  title String
+  folder_id Int
+  folder Folder @relation(fields: [folder_id], references: [id])
+  content Json
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  @@index([folder_id])
+}
+
+
 
 
 

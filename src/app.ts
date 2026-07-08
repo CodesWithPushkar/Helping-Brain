@@ -1,11 +1,11 @@
-import express, {type Request} from 'express'
+import express, {type NextFunction, type Request, type Response} from 'express'
 import { OAuth2Client, type TokenPayload } from 'google-auth-library';
 import path from 'path';
 import 'dotenv/config';
 import cors from 'cors';
 import { fileURLToPath } from 'url'
 import { prisma } from './prismaClient.js';
-import jwt from 'jsonwebtoken'
+import jwt, { type JwtPayload } from 'jsonwebtoken'
 
 
 const app = express();
@@ -81,6 +81,45 @@ app.post('/api/auth/google', async (req, res) => {
     return res.status(401).json({ error: 'Invalid authentication token' });
   }
 });
+
+
+
+const auth = (req:Request, res: Response, next:NextFunction) => {
+  const authToken = req.header('Authorization');
+
+  if (!authToken) {
+      return res.status(400).json({ error: 'Token is required in request body.' });
+  }
+
+  try{
+
+    const decoded = jwt.verify(authToken, JWT_SECRET) as JwtPayload;
+
+    if (!decoded.email) {
+      return res.status(401).json({ error: 'Malformed token payload.' });
+    }
+
+    req.email = decoded.email;
+    next();
+
+  }catch(error){
+    return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+
+}
+
+app.post('/api/workspace', (req, res) => {
+  
+})
+
+
+
+
+
+
+
+
+
 
 
 
