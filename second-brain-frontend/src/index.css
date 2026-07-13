@@ -1,0 +1,46 @@
+@import "@fontsource/inter";
+@import "@fontsource/fraunces";
+@import "@fontsource/jetbrains-mono";
+
+@import "tailwindcss";
+
+@theme {
+  /* Fonts */
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Fraunces", serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Colors */
+  --color-paper: #FAF8F3;
+  --color-paper-dim: #F1EEE6;
+
+  --color-ink: #211E33;
+  --color-ink-soft: #57536E;
+
+  --color-indigo: #443F76;
+  --color-indigo-deep: #332F5C;
+
+  --color-sidebar: #18162A;
+  --color-sidebar-line: #302C4A;
+
+  --color-spark: #E2A63B;
+  --color-spark-soft: #F3D9A4;
+
+  --color-sage: #7C9473;
+
+  --color-line: #E4E0D6;
+
+  --color-danger: #B5573F;
+
+  --color-yello: #e2a63b;
+
+  --color-gradi: #221f3a;
+
+
+
+
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+}
