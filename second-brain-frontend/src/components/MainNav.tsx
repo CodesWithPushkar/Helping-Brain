@@ -13,7 +13,7 @@ const Nav = ({workspaceName}:NavProps) => {
       <span className="text-[#57536e]">{"/ All notes"}</span>
     </span>
     <div className="flex gap-4">
-      <ButtonComponent icon={Bell} className="bg-white" iconColor="black"/>
+      <ButtonComponent icon={Bell} className="bg-white hover:bg-white" iconColor="black"/>
       <ButtonComponent title="Ask AI" icon={Sparkle} iconColor="yellow"/>
     </div>
   </div>

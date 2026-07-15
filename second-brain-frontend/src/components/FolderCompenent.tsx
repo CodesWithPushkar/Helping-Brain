@@ -11,7 +11,7 @@ export type FolderComponentProps = {
 
 const FolderComponent = ({name, icon: Icon, notesCount, color, className}: FolderComponentProps) => {
   return <>
-    <div className="w-64 flex gap-[15px] p-4 m-2px items-center border border-line cursor-pointer rounded-[15px] bg-white">
+    <div className="w-64 flex gap-[15px] p-4 m-2px items-center border border-line cursor-pointer rounded-[15px] bg-white transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md">
       <div className={cn("flex items-center justify-center")}>
         <div className={cn(`flex h-[40px] w-[40px] items-center justify-center rounded-[7px] text-white`, className)}>
           <Icon color={color}/>

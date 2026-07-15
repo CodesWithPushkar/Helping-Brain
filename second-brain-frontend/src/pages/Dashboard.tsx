@@ -18,7 +18,7 @@ const DashboardContent = () => {
 
   return (
     <div 
-      className="flex h-screen w-screen bg-white"
+      className="flex min-h-screen w-full bg-sidebar"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp} 

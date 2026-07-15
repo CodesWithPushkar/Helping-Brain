@@ -1,4 +1,5 @@
 import { type LucideIcon } from "lucide-react";
+import { cn } from "../utils";
 
 type RecentNotesProps = {
   title: string;
@@ -6,6 +7,7 @@ type RecentNotesProps = {
   folder: string;
   updatedAt: string;
   icon: LucideIcon;
+  className?: string;
   color: string;
 };
 
@@ -15,13 +17,14 @@ const RecentNotesCard = ({
   folder,
   updatedAt,
   icon: Icon,
+  className,
   color
 }: RecentNotesProps) => {
   return (
     <div className="flex min-h-[150px] cursor-pointer flex-col gap-[10px] rounded-[14px] border border-line bg-white p-[18px] transition-all duration-150 hover:-translate-y-[2px] hover:border-[#D8D3C4]">
       
       <div className="flex items-center gap-[9px]">
-        <div className={`flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-${color} text-white`}>
+        <div style={{backgroundColor: color}} className={cn(`flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-white`, className)}>
           <Icon size={14} />
         </div>
 
