@@ -6,7 +6,7 @@ import cors from 'cors';
 import { fileURLToPath } from 'url'
 import { prisma } from './prismaClient.js';
 import jwt, { type JwtPayload } from 'jsonwebtoken'
-import { int, z } from 'zod';
+import { z } from 'zod';
 
 
 const app = express();
@@ -16,8 +16,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 app.use(express.json());
-app.use(cors());
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],              
+}));
 
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"];
 const JWT_SECRET = process.env.JWT_SECRET!; 
@@ -31,10 +35,13 @@ const workspaceSchema = z.object({
   name: z.string().min(1, { message: "Name is required and cannot be empty" })
 });
 
-const folderSchema = z.object({
-  name: z.string().min(1, { message: "Name is required and cannot be empty" }),
-  workspaceId: int(),
-  parentFolderId: int().nullable()
+// was folderSchema — a Page now covers both the old Folder and Note concepts
+const pageSchema = z.object({
+  title: z.string().min(1, { message: "Title is required and cannot be empty" }),
+  workspaceId: z.coerce.number().int(),
+  parentPageId: z.coerce.number().int().nullable(),
+  icon: z.string(),
+  color: z.string()
 });
 
 
@@ -169,13 +176,12 @@ app.post('/api/create/workspace', auth, async (req, res) => {
 
 
 
-app.post('/api/create/folder', auth, async (req,res) => {
+app.post('/api/create/page', auth, async (req,res) => {
   const email = req.email;
-  const result = folderSchema.safeParse(req.body);
+  const result = pageSchema.safeParse(req.body);
   if (!result.success) {
-    return res.status(400).json({
-      error: "Validation failed",
-    });
+    console.log(result.error.format());
+    return res.status(400).json({ error: result.error.format() });
   }
 
   if(!email){
@@ -193,29 +199,44 @@ app.post('/api/create/folder', auth, async (req,res) => {
     if(!workspace){
       return res.status(403).json({ error: 'Forbidden' });
     }
+    let createdPage;
 
-    if(!result.data.parentFolderId){
-      await prisma.folder.create({
+    if(!result.data.parentPageId){
+      createdPage = await prisma.page.create({
         data: {
-          name: result.data.name,
-          workspace_id: result.data.workspaceId
+          title: result.data.title,
+          workspace_id: result.data.workspaceId,
+          icon: result.data.icon,
+          color: result.data.color
+        },
+        include: {
+          _count: {
+            select: { children: true }
+          }
         }
       });
     }
     else{
-      const folder = await prisma.folder.findFirst({
+      const parentPage = await prisma.page.findFirst({
         where: {
-          id: result.data.parentFolderId,
+          id: result.data.parentPageId,
           workspace_id: result.data.workspaceId
         }
       })
 
-      if(!folder) return res.status(403).json({ error: 'Forbidden' });
-      await prisma.folder.create({
+      if(!parentPage) return res.status(403).json({ error: 'Forbidden' });
+      createdPage = await prisma.page.create({
         data: {
-          name: result.data.name,
+          title: result.data.title,
           workspace_id: result.data.workspaceId,
-          parent_folder_id: folder.id
+          parent_page_id: parentPage.id,
+          icon: result.data.icon,
+          color: result.data.color
+        },
+        include: {
+          _count: {
+            select: { children: true }
+          }
         }
       });
 
@@ -223,29 +244,61 @@ app.post('/api/create/folder', auth, async (req,res) => {
 
     
 
-    return res.status(200).json({ message: "Created Successfully" });
+    return res.status(200).json({ page: createdPage });
 
   }catch(error){
-    return res.status(401).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  
 
 
 });
 
+app.get("/api/workspace", auth, async (req, res) => {
+  const email = req.email;
+  if(!email){
+    return res.status(401).json({ error: 'Internal error' });
+  }
+
+  try{
+
+    const user = await prisma.user.findUnique({
+      where: {
+        email: email
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if(!user) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
 
+    const workspaces = await prisma.workspace.findMany({
+      where: {
+        owner_id: user.id
+      },
+      include: {
+        pages: {
+          include: {
+            _count: {
+              select: {
+                children: true
+              }
+            }
+          }
+        }
+      }
+    });
 
-
-
-
-
-
-
-
-
-
+    return res.status(200).json({
+      workspaces
+    })
+  }catch(error){
+    return res.status(401).json({ error: 'Internal server error' });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Listning in port ${port}`)

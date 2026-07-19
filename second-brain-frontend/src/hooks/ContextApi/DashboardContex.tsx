@@ -1,22 +1,46 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { useWorkspace } from "../useEffect/useWorkspace";
 
-export type FolderOption = {
+export type PageOption = {
+  id: string;
+  title: string;
+  created_at: Date;
+  updated_at: Date;
+  icon: string;
+  color: string;
+  parent_page_id: number | null;
+  workspace_id: number;
+  _count: {
+    children: number;
+  };
+};
+
+export type WorkspaceOption = {
   id: string;
   initials: string;
   title: string;
   count: number;
+  pages: PageOption[];
   iconColor: string;
 };
-
 
 type DashboardContextType = {
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
   isResizing: boolean;
   setIsResizing: (isResizing: boolean) => void;
-  workspaces: FolderOption[];
-  selectedFolder: FolderOption | null;
-  setSelectedFolder: (folder: FolderOption) => void;
+  workspaces: WorkspaceOption[];
+  selectedWorkspace: WorkspaceOption | null;
+  setSelectedWorkspace: (workspace: WorkspaceOption) => void;
+  pages: PageOption[];
+  setPages: React.Dispatch<React.SetStateAction<PageOption[]>>;
+  selectedPage: PageOption | null;
+  setSelectedPage: (page: PageOption) => void;
+  open: boolean,
+  setOpen: (open: boolean) => void
+  loding: boolean;
+  fetchWorkspace: () => void;
+  error: string | null;
 };
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -24,20 +48,36 @@ const DashboardContext = createContext<DashboardContextType | undefined>(undefin
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [sidebarWidth, setSidebarWidth] = useState<number>(260);
   const [isResizing, setIsResizing] = useState<boolean>(false);
-  const [selectedFolder, setSelectedFolder] = useState<FolderOption | null>(null);
 
-  const workspaces: FolderOption[] = [
-    { id: "1", initials: "PD", title: "Product Design", count: 3, iconColor: "#d99939" },
-    { id: "2", initials: "EN", title: "Engineering", count: 5, iconColor: "#5ca4a9" },
-    { id: "3", initials: "MK", title: "Marketing", count: 1, iconColor: "#e67e88" },
-  ];
+  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceOption | null>(null);
+
+  const [pages, setPages] = useState<PageOption[]>([]);
+  const [selectedPage, setSelectedPage] = useState<PageOption | null>(null);
+  const [open, setOpen] = useState<boolean>(false);
+
+  const { workspaces, loding, error, fetchWorkspace } = useWorkspace();
 
   return (
-    <DashboardContext.Provider value={{
-      sidebarWidth, setSidebarWidth,
-      isResizing, setIsResizing,
-      workspaces, selectedFolder, setSelectedFolder
-    }}>
+    <DashboardContext.Provider
+      value={{
+        sidebarWidth,
+        setSidebarWidth,
+        isResizing,
+        setIsResizing,
+        workspaces,
+        selectedWorkspace,
+        setSelectedWorkspace,
+        pages,
+        setPages,
+        selectedPage,
+        setSelectedPage,
+        open,
+        setOpen,
+        loding,
+        fetchWorkspace,
+        error
+      }}
+    >
       {children}
     </DashboardContext.Provider>
   );

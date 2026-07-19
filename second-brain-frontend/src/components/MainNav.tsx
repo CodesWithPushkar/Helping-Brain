@@ -3,7 +3,6 @@ import { Bell, Sparkle } from "lucide-react";
 
 type NavProps = {
   workspaceName: string;
-
 }
 
 const Nav = ({workspaceName}:NavProps) => {
