@@ -39,8 +39,6 @@ const DashboardContent = () => {
         <Main username="Pushkar" totalFolderCount={3} />
       )}
 
-
-
       {selectedWorkspace && (
               <NewFolderModal
                 isOpen={open}

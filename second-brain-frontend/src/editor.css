@@ -1,0 +1,57 @@
+.ProseMirror {
+  min-height: 160px;
+  outline: none;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1B1E2A;
+  padding: 12px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 10px;
+}
+
+.ProseMirror h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+
+.ProseMirror p {
+  margin: 0 0 12px;
+}
+
+.ProseMirror strong {
+  font-weight: 700;
+}
+
+.ProseMirror ul {
+  padding-left: 22px;
+  margin: 0 0 12px;
+}
+
+.ProseMirror pre {
+  background: #14192B;
+  color: #E7E4F5;
+  padding: 16px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+
+.ProseMirror pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+.ProseMirror pre .hljs-keyword,
+.ProseMirror pre .hljs-selector-tag { color: #D8A34D; }
+
+.ProseMirror pre .hljs-string,
+.ProseMirror pre .hljs-attr { color: #3F8F82; }
+
+.ProseMirror pre .hljs-comment { color: #9599B3; font-style: italic; }
+
+.ProseMirror pre .hljs-number,
+.ProseMirror pre .hljs-variable { color: #C9A6E0; }

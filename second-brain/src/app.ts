@@ -35,7 +35,11 @@ const workspaceSchema = z.object({
   name: z.string().min(1, { message: "Name is required and cannot be empty" })
 });
 
-// was folderSchema — a Page now covers both the old Folder and Note concepts
+const updatePageSchema = z.object({
+  title: z.string().min(1).optional(),
+  content: z.any().optional(), 
+});
+
 const pageSchema = z.object({
   title: z.string().min(1, { message: "Title is required and cannot be empty" }),
   workspaceId: z.coerce.number().int(),
@@ -199,6 +203,7 @@ app.post('/api/create/page', auth, async (req,res) => {
     if(!workspace){
       return res.status(403).json({ error: 'Forbidden' });
     }
+    
     let createdPage;
 
     if(!result.data.parentPageId){
@@ -297,6 +302,48 @@ app.get("/api/workspace", auth, async (req, res) => {
     })
   }catch(error){
     return res.status(401).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.get("/api/page/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  try {
+    const page = await prisma.page.findUnique({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!page) return res.status(404).json({ error: "Not found" });
+
+    return res.status(200).json({ page });
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.patch("/api/page/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  const result = updatePageSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.format() });
+  }
+
+  try {
+    const updated = await prisma.page.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        ...(result.data.title !== undefined && { title: result.data.title }),
+        ...(result.data.content !== undefined && { content: result.data.content }),
+      },
+    });
+
+    return res.status(200).json({ page: updated });
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

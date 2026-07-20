@@ -37,7 +37,7 @@ const Sidebar = () => {
 
   return (
     <>
-      <div className="flex flex-col justify-between bg-sidebar overflow-hidden shrink-0 px-4 py-5">
+      <div className="flex flex-col justify-between bg-sidebar overflow-hidden shrink-0 px-4 py-5 h-screen">
     
         <div 
           className="flex flex-col" 

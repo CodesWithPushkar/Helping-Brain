@@ -9,11 +9,11 @@ import { useNavigate } from 'react-router-dom'
 const Login = () => {
   const navigate = useNavigate();
   return <>
-    <div className="flex flex-col items-center justify-center h-screen bg-paper">
-      <h1 className="font-serif text-[40px] font-semibold text-black mb-10">Helping Brain</h1>
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-paper px-4 py-8 sm:px-6">
+      <h1 className="font-serif text-[32px] font-semibold text-black mb-8 text-center sm:text-[40px] sm:mb-10">Helping Brain</h1>
       <div className="w-full max-w-[380px] flex flex-col">
         <div className="font-mono text-xs text-ink-soft tracking-[0.1em]">SIGN IN</div>
-        <h2 className="font-serif text-[30px] font-medium text-ink">Welcome back</h2>
+        <h2 className="font-serif text-[26px] font-medium text-ink sm:text-[30px]">Welcome back</h2>
         <p className="font-sans text-[14.5px] font-normal leading-[1.6] text-ink-soft mb-8">Pick up your workspaces right where you left them. New here? The same button creates your account.</p>
 
           <GoogleLogin

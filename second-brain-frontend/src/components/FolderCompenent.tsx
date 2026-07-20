@@ -1,7 +1,9 @@
 import { type LucideIcon } from "lucide-react";
 import { cn } from "../utils";
+import { useNavigate } from "react-router-dom";
 
 export type FolderComponentProps = {
+  id: string;
   icon: LucideIcon;
   name: string;
   color: string
@@ -9,8 +11,11 @@ export type FolderComponentProps = {
   childCount: number;
 }
 
-const FolderComponent = ({name, icon: Icon, childCount, color, className}: FolderComponentProps) => {
-  return <>
+const FolderComponent = ({id, name, icon: Icon, childCount, color, className}: FolderComponentProps) => {
+  const navigate = useNavigate();
+  return <button onClick={() => {
+    navigate(`/notes/${id}`)
+  }}>
     <div className="w-64 flex gap-[15px] p-4 m-2px items-center border border-line cursor-pointer rounded-[15px] bg-white transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md">
       <div className={"flex items-center justify-center"}>
         <div style={{backgroundColor: color}} className={cn(`flex h-[40px] w-[40px] items-center justify-center rounded-[7px] text-white`, className)}>
@@ -26,7 +31,7 @@ const FolderComponent = ({name, icon: Icon, childCount, color, className}: Folde
       
 
     </div>
-  </>
+  </button>
 }
 
 export default FolderComponent

@@ -44,6 +44,7 @@ const Main = ({username, totalFolderCount}: MainProps) => {
         pages.slice(0,3).map((p) => (
           <FolderComponent
             key={p.id}
+            id={p.id}
             name={p.title}
             icon={ICONS[p.icon as FolderIconName]}
             childCount={p._count.children}

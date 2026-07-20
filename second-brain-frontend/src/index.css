@@ -12,9 +12,11 @@ body,
   height: 100%;
 }
 
-/* body {
-  background: var(--color-sidebar);
-} */
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  overflow-x: hidden;
+}
 
 @theme {
   /* Fonts */
