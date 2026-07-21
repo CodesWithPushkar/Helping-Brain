@@ -5,7 +5,6 @@ import { Folder as FolderIcon } from "lucide-react";
 const SideBarFolderComponent = () => {
   const { selectedPage, setSelectedPage, selectedWorkspace, pages } = useDashboard();
   if(!selectedWorkspace) return null;
-  console.log("useDashboard() returned:", useDashboard());
   return (
     <div>
       <p className="text-[13.5px] font-semibold text-[#6E6A93] tracking-[0.1em] mb-3">Notes</p>

@@ -4,8 +4,7 @@ import { cn } from "../utils";
 type RecentNotesProps = {
   title: string;
   description: string;
-  folder: string;
-  updatedAt: string;
+  updatedAt: Date;
   icon: LucideIcon;
   className?: string;
   color: string;
@@ -14,7 +13,6 @@ type RecentNotesProps = {
 const RecentNotesCard = ({
   title,
   description,
-  folder,
   updatedAt,
   icon: Icon,
   className,
@@ -39,7 +37,7 @@ const RecentNotesCard = ({
 
       <div className="flex items-center gap-2">
         <span className="font-mono text-[11px] text-[#A7A38F]">
-          {folder}
+          {"Your Notes"}
         </span>
 
         <span className="font-mono text-[11px] text-[#A7A38F]">
@@ -47,7 +45,7 @@ const RecentNotesCard = ({
         </span>
 
         <span className="font-mono text-[11px] text-[#A7A38F]">
-          Edited {updatedAt}
+          Edited {new Date(updatedAt).toLocaleDateString()}
         </span>
       </div>
     </div>

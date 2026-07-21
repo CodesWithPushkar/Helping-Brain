@@ -9,7 +9,6 @@ import api from "../api/axios";
 
 const DashboardContent = () => {
   const { isResizing, setIsResizing, setSidebarWidth, loding, fetchWorkspace, error, selectedWorkspace, setPages, open, setOpen } = useDashboard();
-  console.log("Current State:", { loding, error });
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!isResizing) return;
@@ -23,7 +22,7 @@ const DashboardContent = () => {
 
   return (
     <div 
-      className="flex h-full w-full bg-sidebar"
+      className="flex h-screen w-full bg-sidebar overflow-hidden"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp} 
@@ -52,7 +51,6 @@ const DashboardContent = () => {
                     }
                   });
                   if(res.status==200){
-                    console.log(res.data);
                     setPages(prev => [...prev, res.data.page])
                   }
 
