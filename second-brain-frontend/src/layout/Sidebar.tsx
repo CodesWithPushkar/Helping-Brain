@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import Dropdown from "../components/Dropdown";
 import SearchComponent from "../components/SearchComponent";
 import SideBarFolderComponent from "../components/SideBarFolderComponent";
@@ -7,15 +7,19 @@ import AddButton from "../components/AddButton";
 import { useDashboard } from "../hooks/ContextApi/DashboardContex";
 import ProfileCard from "../components/ProfileCard";
 import { useNavigate } from "react-router-dom";
-
+import NewWorkspaceForm from "../components/WorkspaceForm";
+import api from "../api/axios";
+import { getInitials, workspacePalette } from "../hooks/useEffect/useWorkspace";
 
 const Sidebar = () => {
+  const [addWorkshop, setAddWorkshop] = useState<boolean>(false);
   const navigate = useNavigate();
   const { 
     sidebarWidth, 
     isResizing, 
     setIsResizing, 
     workspaces, 
+    setWorkspaces,
     loding, 
     selectedWorkspace, 
     setSelectedWorkspace,
@@ -54,6 +58,9 @@ const Sidebar = () => {
               options={workspaces} 
               selected={selectedWorkspace}
               onSelect={setSelectedWorkspace}
+              onClickAdd={() => {
+                setAddWorkshop(true);
+              }}
             />
           )}
           
@@ -94,6 +101,31 @@ const Sidebar = () => {
           isResizing ? "bg-blue-500" : "bg-zinc-200"
         }`}
       />
+
+      {<NewWorkspaceForm isOpen={addWorkshop} onClose={() => setAddWorkshop(false)} onCreate={async(data) => {
+        const token = localStorage.getItem('token');
+        const res = await api.post("/create/workspace", data, {
+          headers: {
+            Authorization: token
+          }          
+        });
+        const newWorkspace = res.data.workspace; 
+
+
+
+        setWorkspaces(prev => [...prev, {
+          id: newWorkspace.id.toString(),
+          title: newWorkspace.name,
+          initials: getInitials(newWorkspace.name),
+          pages: newWorkspace.pages ?? [],     
+          count: newWorkspace.pages?.length ?? 0,
+          iconColor: workspacePalette[prev.length % workspacePalette.length],
+
+        }]);
+
+        
+        setAddWorkshop(false);
+      }}/>}
     </>
   );
 }

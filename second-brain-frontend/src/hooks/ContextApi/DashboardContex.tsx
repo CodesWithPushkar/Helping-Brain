@@ -30,6 +30,7 @@ type DashboardContextType = {
   isResizing: boolean;
   setIsResizing: (isResizing: boolean) => void;
   workspaces: WorkspaceOption[];
+  setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceOption[]>>;
   selectedWorkspace: WorkspaceOption | null;
   setSelectedWorkspace: (workspace: WorkspaceOption) => void;
   pages: PageOption[];
@@ -55,7 +56,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [selectedPage, setSelectedPage] = useState<PageOption | null>(null);
   const [open, setOpen] = useState<boolean>(false);
 
-  const { workspaces, loding, error, fetchWorkspace } = useWorkspace();
+  const { workspaces, setWorkspaces, loding, error, fetchWorkspace } = useWorkspace();
 
   return (
     <DashboardContext.Provider
@@ -65,6 +66,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         isResizing,
         setIsResizing,
         workspaces,
+        setWorkspaces,
         selectedWorkspace,
         setSelectedWorkspace,
         pages,

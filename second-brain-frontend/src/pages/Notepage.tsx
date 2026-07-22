@@ -8,7 +8,9 @@ import js from "highlight.js/lib/languages/javascript";
 import api from "../api/axios";
 import "../editor.css";
 import { useParams } from "react-router-dom";
-
+import ButtonComponent from "../components/ButtonComponent"
+import { Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 const lowlight = createLowlight();
 lowlight.register("css", css);
 lowlight.register("javascript", js);
@@ -20,6 +22,7 @@ export default function NotePage() {
   const [loaded, setLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saved" | "saving">("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
 
   const editor = useEditor({
     extensions: [
@@ -74,13 +77,29 @@ export default function NotePage() {
   if (!editor || !loaded) return null;
 
   return (
-    <div className="min-h-screen bg-[#F4F0E6] px-8 py-6">
+    <div className="min-h-screen bg-paper-dim px-8 py-6">
       <div className="max-w-2xl mx-auto">
-        <input
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          className="font-serif text-[38px] font-semibold text-[#1B1E2A] mb-2 w-full bg-transparent outline-none"
-        />
+        <div className="flex items-center">
+          <input
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            className="font-serif text-[38px] font-semibold text-[#1B1E2A] mb-2 w-full bg-transparent outline-none"
+          />
+          <ButtonComponent icon={Trash2} className="bg-black" onClick={async () => {
+            const token = localStorage.getItem("token");
+            await api.delete(`/page/${pageId}`,{
+              headers: {
+                Authorization: token
+              }
+            });
+
+            navigate('/dashboard');
+
+
+          }}></ButtonComponent>
+
+        </div>
+        
 
         <div className="flex gap-2 mb-4">
           <button onClick={() => editor.chain().focus().toggleBold().run()}>Bold</button>

@@ -15,12 +15,6 @@ import {
   X,
 } from "lucide-react";
 
-// ---------------------------------------------------------------------------
-// 1. The icon picker only needs to show a small curated set, not all ~1500
-//    lucide icons. Keep the component -> name map in one place so the
-//    "value" you store/send is always just the string key (e.g. "Brain"),
-//    never the component itself.
-// ---------------------------------------------------------------------------
 export const ICONS = {
   Folder,
   BookOpen,
@@ -38,8 +32,7 @@ export const ICONS = {
 
 export type FolderIconName = keyof typeof ICONS;
 
-// A small palette that matches the Helping Brain design tokens.
-// Swap these hexes for whatever your theme uses.
+
 const COLORS = [
   { name: "Brass", value: "#D8A34D" },
   { name: "Teal", value: "#3F8F82" },
@@ -59,20 +52,13 @@ export interface NewFolderPayload {
 
 interface NewFolderModalProps {
   isOpen: boolean;
-  /** The workspace this page belongs to. See note at the bottom of this
-   *  file for the three common ways to get this value from a parent. */
+
   workspaceId: number;
 
   onClose: () => void;
   onCreate: (page: NewFolderPayload) => void;
 }
 
-/**
- * Renders a "Create folder" form (name + icon + color), scoped to a single
- * workspace. Only the icon's *name* (e.g. "Brain") is ever passed upward —
- * the consuming component is responsible for looking that name back up in
- * ICONS (or its own copy of it) when it wants to actually render the icon.
- */
 export default function NewFolderModal({
   isOpen,
   workspaceId,

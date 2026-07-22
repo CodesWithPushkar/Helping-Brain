@@ -162,14 +162,14 @@ app.post('/api/create/workspace', auth, async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    await prisma.workspace.create({
+    const workspace = await prisma.workspace.create({
       data: {
         name: result.data.name,
         owner_id: user?.id
       }
     })
 
-    return res.status(200).json({ message: "Created Successfully" });
+    return res.status(200).json({ workspace });
   
   }catch(error){
     return res.status(401).json({ error: 'Internal server error' });
@@ -282,10 +282,14 @@ app.get("/api/workspace", auth, async (req, res) => {
 
     const workspaces = await prisma.workspace.findMany({
       where: {
-        owner_id: user.id
+        owner_id: user.id,
+        is_deleted: false
       },
       include: {
         pages: {
+          where: {
+            is_deleted: false
+          },
           include: {
             _count: {
               select: {
@@ -323,6 +327,7 @@ app.get("/api/page/:id", auth, async (req, res) => {
   }
 });
 
+
 app.patch("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
   if (!email) return res.status(401).json({ error: "Internal error" });
@@ -347,6 +352,59 @@ app.patch("/api/page/:id", auth, async (req, res) => {
   }
 });
 
+
+app.delete("/api/workspace/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+  try {
+    const id = Number(req.params.id);
+    const update = await prisma.workspace.update({
+      where: {
+        id
+      },
+      data: {
+        is_deleted: true
+      }
+    })
+
+
+    res.status(200).json({
+      update
+    })
+    
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+app.delete("/api/page/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+  try {
+    const id = Number(req.params.id);
+    const update = await prisma.page.update({
+      where: {
+        id
+      },
+      data: {
+        is_deleted: true
+      }
+    })
+
+
+    res.status(200).json({
+      update
+    })
+    
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+
 app.listen(port, () => {
   console.log(`Listning in port ${port}`)
-})
+});

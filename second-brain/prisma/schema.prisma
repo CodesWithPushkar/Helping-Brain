@@ -26,6 +26,7 @@ model Workspace {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   pages      Page[]
+  is_deleted Boolean @default(false)
 
   @@index([owner_id])
 }
@@ -43,6 +44,7 @@ model Page {
   children       Page[]   @relation("PageHierarchy")
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
+  is_deleted Boolean @default(false)
 
   @@index([workspace_id])
   @@index([parent_page_id])

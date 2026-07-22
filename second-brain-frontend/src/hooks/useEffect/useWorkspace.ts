@@ -1,7 +1,17 @@
 import { useState, useEffect } from "react";
 import { getWorkspaces } from "../../api/workspaces";
 
-const workspacePalette = ["#d99939", "#5ca4a9", "#e67e88", "#8b5cf6", "#22c55e"];
+export const workspacePalette = ["#d99939", "#5ca4a9", "#e67e88", "#8b5cf6", "#22c55e"];
+
+export const getInitials = (name: string) => {
+  const initials = name
+          .split(" ")
+          .slice(0, 2)
+          .map((word: string) => word[0])
+          .join("")
+          .toUpperCase();
+  return initials;
+}
 
 export const useWorkspace = () => {
   const [workspaces, setWorkspaces] = useState<any[]>([]);
@@ -16,12 +26,7 @@ export const useWorkspace = () => {
 
       const formattedWorkspaces = backendWorkspaces.map((ws: any, index: number) => {
         
-        const initials = ws.name
-          .split(" ")
-          .slice(0, 2)
-          .map((word: string) => word[0])
-          .join("")
-          .toUpperCase();
+        const initials = getInitials(ws.name);
 
         return {
           id: ws.id.toString(),
@@ -49,6 +54,7 @@ export const useWorkspace = () => {
 
   return {
     workspaces,
+    setWorkspaces,
     loding,
     error,
     fetchWorkspace,
