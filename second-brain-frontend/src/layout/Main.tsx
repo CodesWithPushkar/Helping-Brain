@@ -71,6 +71,7 @@ const Main = ({username, totalFolderCount}: MainProps) => {
         {recentPages.map((p) => (
             <RecentNotesCard
               key={p.id}
+              id = {p.id}
               title={p.title}
               description={"Your recent notes is here"}
               updatedAt={p.updated_at}

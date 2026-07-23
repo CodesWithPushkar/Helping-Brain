@@ -10,9 +10,11 @@ import { useNavigate } from "react-router-dom";
 import NewWorkspaceForm from "../components/WorkspaceForm";
 import api from "../api/axios";
 import { getInitials, workspacePalette } from "../hooks/useEffect/useWorkspace";
+import { userDetails } from "../hooks/useEffect/useUser";
 
 const Sidebar = () => {
   const [addWorkshop, setAddWorkshop] = useState<boolean>(false);
+  const user = userDetails().user;
   const navigate = useNavigate();
   const { 
     sidebarWidth, 
@@ -84,8 +86,8 @@ const Sidebar = () => {
 
         <div>
           <ProfileCard
-            name="Riya Sharma"
-            email="riya@gmail.com"
+            name={user?.name ?? ""}
+            email={user?.email ?? ""}
             onClick={() => {
               localStorage.removeItem("token");
               navigate("/signin");

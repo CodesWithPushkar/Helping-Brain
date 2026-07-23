@@ -32,27 +32,27 @@ export default function NotePage() {
     ],
     content: "",
     onUpdate: () => {
-      scheduleSave();
+      scheduleSave(title);
     }
   });
 
-  function scheduleSave() {
+  function scheduleSave(currentTitle: string) {
+    if(!loaded) return;
     setSaveStatus("saving");
     if(debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(async () => {
       const token = localStorage.getItem("token");
-      await api.patch(`/page/${pageId}`, { title, content: editor?.getJSON() },
+      await api.patch(`/page/${pageId}`, { title:currentTitle, content: editor?.getJSON() },
         { headers: { Authorization: token } }
       );
       setSaveStatus("saved");
     }, 800);
-    setSaveStatus("")
   }
 
   function handleTitleChange(value: string) {
     setTitle(value);
-    scheduleSave();
+    scheduleSave(value);
   }
 
   useEffect(() => {

@@ -258,6 +258,34 @@ app.post('/api/create/page', auth, async (req,res) => {
 
 });
 
+
+app.get("/api/user", auth, async (req, res) => {
+  const email = req.email;
+  if(!email){
+    return res.status(401).json({ error: 'Internal error' });
+  }
+  try{
+
+    const user = await prisma.user.findUnique({
+      where: {
+        email: email
+      }
+    });
+
+    if(!user) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.status(200).json({
+      user
+    });
+
+  }catch(error){
+    return res.status(401).json({ error: 'Internal server error' });
+  }
+
+})
+
 app.get("/api/workspace", auth, async (req, res) => {
   const email = req.email;
   if(!email){
@@ -314,9 +342,24 @@ app.get("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
   if (!email) return res.status(401).json({ error: "Internal error" });
 
+  
+
   try {
-    const page = await prisma.page.findUnique({
-      where: { id: Number(req.params.id) },
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const page = await prisma.page.findFirst({
+      where: { 
+        id: Number(req.params.id),
+        workspace: {
+          owner_id: user.id
+        }
+       },
     });
 
     if (!page) return res.status(404).json({ error: "Not found" });
