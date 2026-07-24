@@ -15,7 +15,7 @@ type MainProps = {
 
 const Main = ({username, totalFolderCount}: MainProps) => {
 
-  const { pages, setOpen } = useDashboard();
+  const { pages, setOpen, selectedWorkspace } = useDashboard();
   const recentPages = [...pages]
   .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   .slice(0, 6);
@@ -23,7 +23,7 @@ const Main = ({username, totalFolderCount}: MainProps) => {
   return <div className="bg-paper-dim h-full w-full overflow-y-auto">
     <div className="flex flex-1 px-9 pt-7 pb-15 flex-col max-w-[1160px]">
 
-      <MainNav workspaceName="Product title"/>
+      <MainNav workspaceName={selectedWorkspace?.title ?? ""}/>
 
       
       <span className="font-mono text-[#57536e] text-sm mb-1">Good afternoon, {username}</span>

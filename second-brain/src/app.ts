@@ -94,7 +94,6 @@ app.post('/api/auth/google', async (req, res) => {
       email: user.email
     }, JWT_SECRET);
 
-    console.log(jwtToken)
 
     res.status(200).json({
       token: jwtToken
@@ -370,6 +369,54 @@ app.get("/api/page/:id", auth, async (req, res) => {
   }
 });
 
+
+app.get("/api/notes/search", auth, async(req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  const { q, workspaceId } = req.query;
+
+  if(!q || typeof q!=='string'){
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  if (!workspaceId) {
+    return res.status(400).json({ error: 'Workspace ID is required' });
+  }
+
+
+  try {
+    const workspace = await prisma.workspace.findUnique({
+      where: {
+        id: Number(workspaceId)
+      }
+    });
+
+    if(!workspace){
+      return res.status(403).json({
+        error: "No workspace found with this id"
+      });
+    }
+
+
+    const notes = await prisma.page.findMany({
+      where: {
+        workspace_id: Number(workspaceId),
+        title: {
+          contains: q,
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    console.log(notes);
+
+    return res.status(200).json(notes);
+
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 app.patch("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
