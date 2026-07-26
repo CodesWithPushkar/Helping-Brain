@@ -130,7 +130,7 @@ VITE_API_URL=
 - [x] Workspace
 - [x] Folder Management
 - [x] Dashboard
-- [ ] Rich Text Editor
+- [X] Rich Text Editor
 - [ ] AI Search
 - [ ] File Upload
 - [ ] Tags
