@@ -66,7 +66,7 @@ const Sidebar = () => {
             />
           )}
           
-          <SearchComponent icon={Search} placeholder="Search notes" bgColor="bg-[#22213c]" iconColor="text-white" className="my-4"/>
+          <SearchComponent icon={Search} placeholder="Search notes" bgColor="bg-[#22213c]" iconColor="text-white" className="my-4" />
 
           {loding ? (
             <div className="flex flex-col gap-4 animate-pulse mt-2 mb-4">

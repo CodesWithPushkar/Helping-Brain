@@ -5,6 +5,8 @@ import "./editor.css";
 import App from './App.tsx'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { BrowserRouter } from 'react-router-dom'
+import "tippy.js/dist/tippy.css";
+
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

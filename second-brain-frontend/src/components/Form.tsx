@@ -103,7 +103,6 @@ export default function NewFolderModal({
           </div>
 
           <div className="px-5 pb-5 flex flex-col gap-5">
-            {/* Name */}
             <div className="flex flex-col gap-1.5">
               <label htmlFor="folder-name" className="text-xs font-semibold text-[#1B1E2A]">
                 Name
@@ -122,7 +121,6 @@ export default function NewFolderModal({
               {error && <span className="text-xs text-[#B4553F]">{error}</span>}
             </div>
 
-            {/* Icon picker */}
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold text-[#1B1E2A]">Icon</span>
               <div className="grid grid-cols-6 gap-2">

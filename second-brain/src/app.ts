@@ -418,6 +418,31 @@ app.get("/api/notes/search", auth, async(req, res) => {
   }
 });
 
+app.get("/api/pages", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  const workspaceId = Number(req.query.workspaceId);
+  if (!workspaceId) return res.status(400).json({ error: "workspaceId is required" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const pages = await prisma.page.findMany({
+      where: {
+        workspace_id: workspaceId,
+        workspace: { owner_id: user.id },
+      },
+      select: { id: true, title: true },
+    });
+
+    return res.status(200).json({ pages });
+  } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.patch("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
   if (!email) return res.status(401).json({ error: "Internal error" });

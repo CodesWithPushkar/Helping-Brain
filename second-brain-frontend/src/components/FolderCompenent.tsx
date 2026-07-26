@@ -6,9 +6,9 @@ export type FolderComponentProps = {
   id: string;
   icon: LucideIcon;
   name: string;
-  color: string
+  color?: string
   className?: string;
-  childCount: number;
+  childCount?: number;
 }
 
 const FolderComponent = ({id, name, icon: Icon, childCount, color, className}: FolderComponentProps) => {

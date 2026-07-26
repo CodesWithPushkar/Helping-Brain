@@ -6,7 +6,7 @@ const DashboardSkeleton = () => {
   return (
     <div className="flex-grow bg-[#f4f0e6] py-10 px-6 md:px-14 min-h-screen flex flex-col gap-10 font-sans">
       
-      {/* Top Header: Title and Buttons */}
+
       <div className="flex justify-between items-center">
         <div className={`${shimmerClass} h-6 w-48 sm:w-64`}></div>
         <div className="flex gap-4">
@@ -15,7 +15,7 @@ const DashboardSkeleton = () => {
         </div>
       </div>
 
-      {/* Hero Section: Greeting, Big Title, Subtitle */}
+
       <div className="flex flex-col gap-4">
         <div className={`${shimmerClass} h-4 w-32`}></div>
         <div className={`${shimmerClass} h-12 w-full max-w-[450px]`}></div>

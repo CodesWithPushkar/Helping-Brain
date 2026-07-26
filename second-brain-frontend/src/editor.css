@@ -1,18 +1,32 @@
 .ProseMirror {
   min-height: 160px;
-  outline: none;
   font-size: 15px;
   line-height: 1.7;
   color: #1B1E2A;
   padding: 12px;
   border: 1px solid rgba(0,0,0,0.1);
   border-radius: 10px;
+  white-space: pre-wrap !important;
+  word-wrap: break-word;
+  outline: none; 
+}
+
+.ProseMirror h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 20px 0 10px;
 }
 
 .ProseMirror h2 {
   font-size: 22px;
   font-weight: 600;
   margin: 16px 0 8px;
+}
+
+.ProseMirror h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 14px 0 6px;
 }
 
 .ProseMirror p {
@@ -26,6 +40,33 @@
 .ProseMirror ul {
   padding-left: 22px;
   margin: 0 0 12px;
+  list-style: disc;
+}
+
+.ProseMirror ol {
+  padding-left: 22px;
+  margin: 0 0 12px;
+  list-style: decimal;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid #D8A34D;
+  padding-left: 14px;
+  margin: 0 0 12px;
+  color: #57536E;
+  font-style: italic;
+}
+
+
+.tippy-box {
+  background-color: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.tippy-box[data-placement] > .tippy-arrow {
+  display: none;
 }
 
 .ProseMirror pre {
@@ -46,12 +87,39 @@
 }
 
 .ProseMirror pre .hljs-keyword,
-.ProseMirror pre .hljs-selector-tag { color: #D8A34D; }
+.ProseMirror pre .hljs-selector-tag { 
+  color: #D8A34D; 
+}
 
 .ProseMirror pre .hljs-string,
-.ProseMirror pre .hljs-attr { color: #3F8F82; }
+.ProseMirror pre .hljs-attr { 
+  color: #3F8F82; 
+}
 
-.ProseMirror pre .hljs-comment { color: #9599B3; font-style: italic; }
+.ProseMirror pre .hljs-comment { 
+  color: #9599B3; 
+  font-style: italic; 
+}
 
 .ProseMirror pre .hljs-number,
-.ProseMirror pre .hljs-variable { color: #C9A6E0; }
+.ProseMirror pre .hljs-variable { 
+  color: #C9A6E0; 
+}
+
+.ProseMirror pre .hljs-function,
+.ProseMirror pre .hljs-title.function_,
+.ProseMirror pre .hljs-title { 
+  color: #9FB8E8; 
+}
+
+
+.ProseMirror pre .hljs-class .hljs-title,
+.ProseMirror pre .hljs-title.class_,
+.ProseMirror pre .hljs-built_in,
+.ProseMirror pre .hljs-type {
+  color: #E5C07B; 
+}
+
+.ProseMirror pre .hljs-meta {
+  color: #E06C75; 
+}
