@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: true,
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],              
 }));
@@ -341,8 +341,6 @@ app.get("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
   if (!email) return res.status(401).json({ error: "Internal error" });
 
-  
-
   try {
 
     const user = await prisma.user.findUnique({
@@ -442,6 +440,10 @@ app.get("/api/pages", auth, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+
+
 
 app.patch("/api/page/:id", auth, async (req, res) => {
   const email = req.email;
