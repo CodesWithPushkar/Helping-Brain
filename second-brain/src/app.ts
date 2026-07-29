@@ -48,6 +48,12 @@ const pageSchema = z.object({
   color: z.string()
 });
 
+const getPageAiSchema = z.object({
+  userId: z.number(),
+  workspaceId: z.number(),
+  pageId: z.number(),
+});
+
 
 
 
@@ -438,6 +444,46 @@ app.get("/api/pages", auth, async (req, res) => {
     return res.status(200).json({ pages });
   } catch (error) {
     return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+
+
+app.post("/api/ai/page", async (req, res) => {
+  const result = getPageAiSchema.safeParse(req.body);
+
+  if (!result.success) {
+    return res.status(400).json({
+      error: result.error.format(),
+    });
+  }
+
+  const { userId, workspaceId, pageId } = result.data;
+
+  try {
+    const page = await prisma.page.findFirst({
+      where: {
+        id: pageId,
+        workspace: {
+          id: workspaceId,
+          owner_id: userId,
+        },
+      },
+    });
+
+    if (!page) {
+      return res.status(404).json({
+        error: "Page not found",
+      });
+    }
+
+    return res.status(200).json(page);
+  } catch (err) {
+    return res.status(500).json({
+      error: "Internal server error",
+    });
   }
 });
 
