@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { prisma } from './prismaClient.js';
 import jwt, { type JwtPayload } from 'jsonwebtoken'
 import { z } from 'zod';
+import axios from 'axios';
 
 
 const app = express();
@@ -52,6 +53,12 @@ const getPageAiSchema = z.object({
   userId: z.number(),
   workspaceId: z.number(),
   pageId: z.number(),
+});
+
+const chatSchema = z.object({
+  role: z.string(),
+  message: z.string(),
+  page_id: z.number(),
 });
 
 
@@ -488,7 +495,112 @@ app.post("/api/ai/page", async (req, res) => {
 });
 
 
+app.post("/api/ai/newchat", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
 
+  const result = chatSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({
+      error: result.error.format(),
+    });
+  }
+
+  const { role, message, page_id } = result.data;
+
+  const cleanText = message.replace(/[#_*~`]/g, "").trim();
+  const words = cleanText.split(/\s+/);
+  let title = words.slice(0, 5).join(" ");
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+  if (words.length > 5) {
+    title += "...";
+  }
+
+  try {
+    const newChat = await prisma.chat.create({
+      data: {
+        title: title,
+        page_id: page_id,
+        messages: {
+          create: {
+            role: role,
+            content: message
+          }
+        }
+      },
+      include: {
+        messages: true 
+      }
+    });
+
+    return res.status(201).json({
+      success: true,
+      chat: newChat
+    });
+
+  } catch (error) {
+    return res.status(500).json({ 
+      error: "An internal server error occurred while creating the chat." 
+    });
+  }
+});
+
+
+app.post("/api/ai/chat/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+  
+  const id = req.params.id;
+  const result = chatSchema.safeParse(req.body);
+  
+  if (!result.success) {
+    return res.status(400).json({
+      error: result.error.format(),
+    });
+  }
+
+  const { role, message, page_id } = result.data;
+
+  const llmRes = await axios.post('http://localhost:8000/chat')
+
+
+
+  try {
+    const updatedChat = await prisma.chat.update({
+      where: {
+        id: Number(id)
+      },
+      data: {
+        messages: {
+          create: {
+            role: role,
+            content: message 
+          }
+        }
+      },
+     
+      include: {
+        messages: {
+          orderBy: {
+            id: 'desc'
+          },
+          take: 1
+        }
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      newMessage: updatedChat.messages[0]
+    });
+
+  } catch (error) {
+  
+    return res.status(500).json({ 
+      error: "An internal server error occurred while adding the message." 
+    });
+  }
+});
 
 
 app.patch("/api/page/:id", auth, async (req, res) => {

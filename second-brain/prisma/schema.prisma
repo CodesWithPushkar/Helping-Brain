@@ -27,6 +27,7 @@ model Workspace {
   updated_at DateTime @updatedAt
   pages      Page[]
   is_deleted Boolean @default(false)
+  
 
   @@index([owner_id])
 }
@@ -45,7 +46,26 @@ model Page {
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
   is_deleted Boolean @default(false)
-
+  chat Chat[]
   @@index([workspace_id])
   @@index([parent_page_id])
+}
+
+model Chat {
+  id           Int      @id @default(autoincrement())
+  title        String
+  page_id      Int
+  page         Page @relation(fields: [page_id], references: [id])
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  messages     ChatMessage[]
+}
+
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  role       String   
+  content    String
+  chat_id    Int
+  chat       Chat @relation(fields: [chat_id], references: [id])
+  created_at DateTime @default(now())
 }
