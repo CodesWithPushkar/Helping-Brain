@@ -56,10 +56,11 @@ const getPageAiSchema = z.object({
 });
 
 const chatSchema = z.object({
-  role: z.string(),
-  message: z.string(),
-  page_id: z.number(),
+  message: z.string().min(1, { message: "Message cannot be empty" }),
+  page_id: z.coerce.number().int(),
 });
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
 
 
 
@@ -506,36 +507,80 @@ app.post("/api/ai/newchat", auth, async (req, res) => {
     });
   }
 
-  const { role, message, page_id } = result.data;
-
-  const cleanText = message.replace(/[#_*~`]/g, "").trim();
-  const words = cleanText.split(/\s+/);
-  let title = words.slice(0, 5).join(" ");
-  title = title.charAt(0).toUpperCase() + title.slice(1);
-  if (words.length > 5) {
-    title += "...";
-  }
+  const { message, page_id } = result.data;
 
   try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const page = await prisma.page.findFirst({
+      where: {
+        id: page_id,
+        workspace: { owner_id: user.id },
+      },
+      select: { id: true, workspace_id: true },
+    });
+
+    if (!page) return res.status(403).json({ error: "Forbidden" });
+
+    const cleanText = message.replace(/[#_*~`]/g, "").trim();
+    const words = cleanText.split(/\s+/);
+    let title = words.slice(0, 5).join(" ");
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    if (words.length > 5) {
+      title += "...";
+    }
+
     const newChat = await prisma.chat.create({
       data: {
         title: title,
         page_id: page_id,
         messages: {
           create: {
-            role: role,
+            role: "user",
             content: message
           }
         }
       },
       include: {
-        messages: true 
+        messages: true
       }
+    });
+
+    let aiText: string;
+    try {
+      const llmRes = await axios.post(`${AI_SERVICE_URL}/chat`, {
+        userId: user.id,
+        workspaceId: page.workspace_id,
+        pageId: page_id,
+        message,
+        history: [],
+      });
+
+      aiText = llmRes.data.answer;
+    } catch (aiError) {
+      console.error("AI service error:", aiError);
+      aiText = "Sorry, I couldn't reach the assistant just now. Please try again.";
+    }
+
+    const assistantMessage = await prisma.chatMessage.create({
+      data: {
+        role: "assistant",
+        content: aiText,
+        chat_id: newChat.id,
+      },
     });
 
     return res.status(201).json({
       success: true,
-      chat: newChat
+      chat: {
+        ...newChat,
+        messages: [...newChat.messages, assistantMessage],
+      },
     });
 
   } catch (error) {
@@ -549,53 +594,86 @@ app.post("/api/ai/newchat", auth, async (req, res) => {
 app.post("/api/ai/chat/:id", auth, async (req, res) => {
   const email = req.email;
   if (!email) return res.status(401).json({ error: "Internal error" });
-  
-  const id = req.params.id;
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Invalid chat id" });
+  }
+
   const result = chatSchema.safeParse(req.body);
-  
   if (!result.success) {
     return res.status(400).json({
       error: result.error.format(),
     });
   }
 
-  const { role, message, page_id } = result.data;
-
-  const llmRes = await axios.post('http://localhost:8000/chat')
-
-
+  const { message, page_id } = result.data;
 
   try {
-    const updatedChat = await prisma.chat.update({
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const chat = await prisma.chat.findFirst({
       where: {
-        id: Number(id)
+        id,
+        page: { workspace: { owner_id: user.id } },
       },
-      data: {
-        messages: {
-          create: {
-            role: role,
-            content: message 
-          }
-        }
-      },
-     
       include: {
-        messages: {
-          orderBy: {
-            id: 'desc'
-          },
-          take: 1
-        }
-      }
+        messages: { orderBy: { id: "asc" } },
+        page: { select: { workspace_id: true } },
+      },
+    });
+
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const userMessage = await prisma.chatMessage.create({
+      data: {
+        role: "user",
+        content: message,
+        chat_id: chat.id,
+      },
+    });
+
+    const history = chat.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    let aiText: string;
+    try {
+      const llmRes = await axios.post(`${AI_SERVICE_URL}/chat`, {
+        userId: user.id,
+        workspaceId: chat.page.workspace_id,
+        pageId: page_id,
+        message,
+        history,
+      });
+      aiText = llmRes.data.answer;
+    } catch (aiError) {
+      console.error("AI service error:", aiError);
+      aiText = "Sorry, I couldn't reach the assistant just now. Please try again.";
+    }
+
+    const assistantMessage = await prisma.chatMessage.create({
+      data: {
+        role: "assistant",
+        content: aiText,
+        chat_id: chat.id,
+      },
     });
 
     return res.status(200).json({
       success: true,
-      newMessage: updatedChat.messages[0]
+      userMessage,
+      assistantMessage,
     });
 
   } catch (error) {
-  
+    console.error(error);
     return res.status(500).json({ 
       error: "An internal server error occurred while adding the message." 
     });

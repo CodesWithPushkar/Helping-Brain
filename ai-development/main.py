@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from typing import List, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -14,7 +15,7 @@ load_dotenv()
 app = FastAPI()
 
 
-NODE_URL = "http://localhost:3000"
+NODE_URL = os.getenv("NODE_URL", "http://localhost:3000")
 
 llm = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -22,37 +23,18 @@ llm = ChatOpenAI(
     model="google/gemma-4-31b-it:free"
 )
 
+
+class ChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     userId: int
     workspaceId: int
     pageId: int
     message: str
-
-
-
-CURRENT_USER_ID = None
-CURRENT_WORKSPACE_ID = None
-
-
-@tool
-def get_notes(pageId: int):
-    """
-    Fetch a page from the user's workspace using its page ID.
-    """
-
-    res = requests.post(
-        f"{NODE_URL}/api/ai/page",
-        json={
-            "pageId": pageId,
-            "userId": CURRENT_USER_ID,
-            "workspaceId": CURRENT_WORKSPACE_ID,
-        },
-    )
-
-    res.raise_for_status()
-
-    return res.json()
-
+    history: List[ChatHistoryMessage] = []
 
 
 SYSTEM_PROMPT = """
@@ -68,36 +50,58 @@ Rules:
 """
 
 
-agent = create_agent(
-    model=llm,
-    tools=[get_notes],
-    system_prompt=SYSTEM_PROMPT,
-)
+def build_agent(user_id: int, workspace_id: int):
+    """
+    Build a fresh agent scoped to a single request's user/workspace context.
+    This avoids sharing mutable global state across concurrent requests.
+    """
+
+    @tool
+    def get_notes(pageId: int):
+        """
+        Fetch a page from the user's workspace using its page ID.
+        """
+        res = requests.post(
+            f"{NODE_URL}/api/ai/page",
+            json={
+                "pageId": pageId,
+                "userId": user_id,
+                "workspaceId": workspace_id,
+            },
+            timeout=15,
+        )
+        res.raise_for_status()
+        return res.json()
+
+    return create_agent(
+        model=llm,
+        tools=[get_notes],
+        system_prompt=SYSTEM_PROMPT,
+    )
+
 
 @app.post("/chat")
 def chat(data: ChatRequest):
+    agent = build_agent(data.userId, data.workspaceId)
 
-    global CURRENT_USER_ID
-    global CURRENT_WORKSPACE_ID
+    messages = [{"role": m.role, "content": m.content} for m in data.history]
 
-    CURRENT_USER_ID = data.userId
-    CURRENT_WORKSPACE_ID = data.workspaceId
-
-    response = agent.invoke(
+    messages.append(
         {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"""
+            "role": "user",
+            "content": f"""
 Current page id: {data.pageId}
 
 Question:
 {data.message}
-"""
-                }
-            ]
+""",
         }
     )
+
+    try:
+        response = agent.invoke({"messages": messages})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Agent failed: {exc}")
 
     return {
         "answer": response["messages"][-1].content
