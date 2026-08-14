@@ -13,8 +13,9 @@ import api from "../api/axios";
 import "../editor.css";
 import { useParams, useNavigate } from "react-router-dom";
 import ButtonComponent from "../components/ButtonComponent";
-import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2 } from "lucide-react";
+import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles } from "lucide-react";
 import PageLinkNode from "../extension/PageLinkNode";
+import ChatSidebar from "../layout/ChatSideBar";
 
 const lowlight = createLowlight();
 lowlight.register("css", css);
@@ -35,6 +36,8 @@ export default function NotePage() {
   const [linkQuery, setLinkQuery] = useState("");
   const [workspaceId, setWorkspaceId] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<"" | "saved" | "saving">("");
+  const [showChatSidebar, setShowChatSidebar] = useState(false);
+  const [chatSessionKey, setChatSessionKey] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const pagesRef = useRef<PageOption[]>([]);
@@ -166,17 +169,28 @@ export default function NotePage() {
           className="font-serif text-[42px] leading-tight font-semibold text-[#1B1E2A] flex-1 bg-transparent outline-none placeholder:text-[#1B1E2A]/25"
         />
 
-        <ButtonComponent
-          icon={Trash2}
-          className="!bg-[#1B1E2A] !rounded-full hover:!bg-black shrink-0"
-          onClick={async () => {
-            const token = localStorage.getItem("token");
-            await api.delete(`/page/${pageId}`, {
-              headers: { Authorization: token },
-            });
-            navigate("/dashboard");
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <ButtonComponent
+            icon={Sparkles}
+            className="!bg-[#FAF8F3] !text-[#1B1E2A] !rounded-full !border !border-black/10 hover:!bg-[#F4EED8] shrink-0"
+            onClick={() => {
+              setShowChatSidebar(true);
+              setChatSessionKey((prev) => prev + 1);
+            }}
+          />
+
+          <ButtonComponent
+            icon={Trash2}
+            className="!bg-[#1B1E2A] !rounded-full hover:!bg-black shrink-0"
+            onClick={async () => {
+              const token = localStorage.getItem("token");
+              await api.delete(`/page/${pageId}`, {
+                headers: { Authorization: token },
+              });
+              navigate("/dashboard");
+            }}
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-3 text-sm text-[#1B1E2A]/40 mb-6">
@@ -186,11 +200,17 @@ export default function NotePage() {
 
       <div className="h-px bg-black/[0.06] mb-6" />
 
-      <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm px-8 py-6">
-        <EditorContent
-          editor={editor}
-          className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
-        />
+      <div className="flex items-start gap-6">
+        <div className="flex-1 bg-white rounded-2xl border border-black/[0.06] shadow-sm px-8 py-6">
+          <EditorContent
+            editor={editor}
+            className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
+          />
+        </div>
+
+        {showChatSidebar && (
+          <ChatSidebar key={chatSessionKey} pageId={pageId} />
+        )}
       </div>
     </div>
 

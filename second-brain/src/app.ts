@@ -458,6 +458,76 @@ app.get("/api/pages", auth, async (req, res) => {
 
 
 
+app.get("/api/ai/chats", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  const page_id = Number(req.query.page_id);
+  if (!Number.isInteger(page_id)) {
+    return res.status(400).json({ error: "Invalid page_id" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const page = await prisma.page.findFirst({
+      where: { id: page_id, workspace: { owner_id: user.id } },
+      select: { id: true },
+    });
+    if (!page) return res.status(403).json({ error: "Forbidden" });
+
+    const chats = await prisma.chat.findMany({
+      where: { page_id },
+      orderBy: { created_at: "desc" },
+      select: { id: true, title: true, created_at: true },
+    });
+
+    return res.status(200).json({ success: true, chats });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "An internal server error occurred while fetching chats.",
+    });
+  }
+});
+
+app.get("/api/ai/chat/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Internal error" });
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Invalid chat id" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!user) return res.status(401).json({ error: "Internal error" });
+
+    const chat = await prisma.chat.findFirst({
+      where: { id, page: { workspace: { owner_id: user.id } } },
+      include: { messages: { orderBy: { id: "asc" } } },
+    });
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    return res.status(200).json({ success: true, chat });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "An internal server error occurred while fetching the chat.",
+    });
+  }
+});
+
+
+
 
 app.post("/api/ai/page", async (req, res) => {
   const result = getPageAiSchema.safeParse(req.body);
