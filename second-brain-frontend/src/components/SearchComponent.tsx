@@ -42,14 +42,13 @@ const SearchComponent = ({
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const { selectedWorkspace } = useDashboard();
+  const isWorkspaceLocked = !selectedWorkspace;
 
   useEffect(() => {
-
     if (!search.trim() || !selectedWorkspace?.id) {
       setNotes([]);
       return;
     }
-
 
     const fetchSearchNotes = async () => {
       setLoading(true);
@@ -70,40 +69,36 @@ const SearchComponent = ({
       }
     };
 
-
     const delayDebounceFn = setTimeout(() => {
       fetchSearchNotes();
     }, 300);
 
-
     return () => clearTimeout(delayDebounceFn);
   }, [search, selectedWorkspace?.id]);
 
-  if (!selectedWorkspace) return null;
-
   return (
-
     <div className="relative w-full">
       <div
         className={cn(
           `flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 ${bgColor} border-none`,
-          className
+          className,
+          isWorkspaceLocked && "opacity-70"
         )}
       >
         {Icon && <Icon size={18} className="shrink-0" color={iconColor} />}
 
         <input
           className={`flex-1 bg-transparent outline-none placeholder:font-sans placeholder:text-[14px] placeholder:${placeholderTextColor} placeholder:font-normal ${iconColor}`}
-          placeholder={placeholder}
+          placeholder={isWorkspaceLocked ? "Create a workspace to start searching" : placeholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          disabled={isWorkspaceLocked}
         />
 
         {rightElement}
       </div>
 
-
-      {search.trim() && (
+      {!isWorkspaceLocked && search.trim() && (
         <div className="absolute top-full mt-2 left-0 right-0 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
           {loading ? (
             <div className="flex items-center justify-center p-4 text-slate-500">

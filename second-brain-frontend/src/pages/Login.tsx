@@ -1,5 +1,5 @@
 import { GoogleLogin } from "@react-oauth/google";
-import axios from 'axios';
+import api from '../api/axios';
 import { useNavigate } from 'react-router-dom'
 
 
@@ -19,17 +19,20 @@ const Login = () => {
           <GoogleLogin
             onSuccess={async (credentialResponse) => {
               try {
-                const response = await axios.post("http://localhost:3000/api/auth/google", {
+                const response = await api.post("/auth/google", {
                     token: credentialResponse.credential,
                 });
 
                 const jwt = response.data.token;
-                console.log(jwt);
                 localStorage.setItem("token", jwt);
-                navigate('/dashboard', {replace: true})
+                const next = new URLSearchParams(window.location.search).get("next");
+                navigate(next?.startsWith("/join/") ? next : "/dashboard", { replace: true })
 
               } catch (error) {
-                console.error(error);
+                console.error(
+                  "Google sign-in request failed:",
+                  error instanceof Error ? error.message : "Unknown error",
+                );
               }
             }}
             onError={() => {

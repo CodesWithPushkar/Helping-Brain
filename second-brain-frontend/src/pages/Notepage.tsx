@@ -16,6 +16,11 @@ import ButtonComponent from "../components/ButtonComponent";
 import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles } from "lucide-react";
 import PageLinkNode from "../extension/PageLinkNode";
 import ChatSidebar from "../layout/ChatSideBar";
+import { markdownToTiptapHTML } from "../Markdowntotiptap";
+import { io } from "socket.io-client";
+import { apiOrigin } from "../api/axios";
+import { userDetails } from "../hooks/useEffect/useUser";
+import type { JSONContent } from "@tiptap/core";
 
 const lowlight = createLowlight();
 lowlight.register("css", css);
@@ -27,6 +32,13 @@ lowlight.register("cpp", cpp);
 
 export type PageOption = { id: number; title: string };
 
+type PageUpdateEvent = {
+  pageId: number;
+  title: string;
+  content: JSONContent | string | null;
+  updatedBy: { id: number; name: string } | null;
+};
+
 export default function NotePage() {
   const { id } = useParams();
   const pageId = id ?? "";
@@ -35,12 +47,18 @@ export default function NotePage() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
   const [workspaceId, setWorkspaceId] = useState<number | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"" | "saved" | "saving">("");
+  const [saveStatus, setSaveStatus] = useState<"" | "saved" | "saving" | "error">("");
+  const [createdByName, setCreatedByName] = useState("");
+  const [updatedByName, setUpdatedByName] = useState("");
+  const [remoteUpdate, setRemoteUpdate] = useState<PageUpdateEvent | null>(null);
   const [showChatSidebar, setShowChatSidebar] = useState(false);
   const [chatSessionKey, setChatSessionKey] = useState(0);
+  const [aiAdded, setAiAdded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
-  const pagesRef = useRef<PageOption[]>([]);
+  const [pages, setPages] = useState<PageOption[]>([]);
+  const isDirtyRef = useRef(false);
+  const currentUser = userDetails().user;
 
 
   const editor = useEditor({
@@ -51,6 +69,7 @@ export default function NotePage() {
     ],
     content: "",
     onUpdate: () => {
+      isDirtyRef.current = true;
       scheduleSave(title);
     },
   });
@@ -62,18 +81,37 @@ export default function NotePage() {
 
     debounceRef.current = setTimeout(async () => {
       const token = localStorage.getItem("token");
-      await api.patch(
-        `/page/${pageId}`,
-        { title: currentTitle, content: editor?.getJSON() },
-        { headers: { Authorization: token } }
-      );
-      setSaveStatus("saved");
+      try {
+        const response = await api.patch(
+          `/page/${pageId}`,
+          { title: currentTitle, content: editor?.getJSON() },
+          { headers: { Authorization: token } }
+        );
+        isDirtyRef.current = false;
+        setUpdatedByName(response.data.page.updated_by?.name ?? currentUser?.name ?? "");
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error(
+          "Page save failed:",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+        setSaveStatus("error");
+      }
     }, 800);
   }
 
   function handleTitleChange(value: string) {
+    isDirtyRef.current = true;
     setTitle(value);
     scheduleSave(value);
+  }
+
+  function handleAddToNote(content: string) {
+    if (!editor) return;
+    const html = markdownToTiptapHTML(content);
+    editor.chain().focus().insertContentAt(editor.state.doc.content.size, html).run();
+    setAiAdded(true);
+    scheduleSave(title);
   }
 
   function insertPageLink(page: { id: number; title: string }) {
@@ -93,7 +131,7 @@ export default function NotePage() {
       { headers: { Authorization: token } }
     );
     const newPage = res.data.page;
-    pagesRef.current = [...pagesRef.current, { id: newPage.id, title: newPage.title }];
+    setPages((currentPages) => [...currentPages, { id: newPage.id, title: newPage.title }]);
     insertPageLink({ id: newPage.id, title: newPage.title });
   }
 
@@ -113,13 +151,15 @@ export default function NotePage() {
       const page = res.data.page;
       setTitle(page.title);
       setWorkspaceId(page.workspace_id);
+      setCreatedByName(page.created_by?.name ?? "");
+      setUpdatedByName(page.updated_by?.name ?? page.created_by?.name ?? "");
 
       editor?.commands.setContent(page.content ?? "");
 
       const workspacePagesRes = await api.get(`/pages?workspaceId=${page.workspace_id}`, {
         headers: { Authorization: token },
       });
-      pagesRef.current = workspacePagesRes.data.pages;
+      setPages(workspacePagesRes.data.pages);
 
       setLoaded(true);
     }
@@ -127,91 +167,165 @@ export default function NotePage() {
     if (editor) loadPage();
   }, [editor, pageId]);
 
+  useEffect(() => {
+    if (!editor || !loaded || !workspaceId) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socket = io(apiOrigin, { auth: { token } });
+    socket.on("connect", () => {
+      socket.emit("workspace:join", { workspaceId }, (result: { success: boolean; error?: string }) => {
+        if (!result.success) console.error("Workspace live updates unavailable:", result.error);
+      });
+    });
+
+    socket.on("page:updated", (update: PageUpdateEvent) => {
+      if (String(update.pageId) !== pageId || update.updatedBy?.id === currentUser?.id) return;
+
+      if (isDirtyRef.current || editor.isFocused) {
+        setRemoteUpdate(update);
+        return;
+      }
+
+      setTitle(update.title);
+      setUpdatedByName(update.updatedBy?.name ?? "");
+      editor.commands.setContent(update.content ?? "", { emitUpdate: false });
+      setRemoteUpdate(null);
+    });
+
+    socket.on("page:deleted", (event: { pageId: number }) => {
+      if (String(event.pageId) === pageId) navigate("/dashboard", { replace: true });
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Live collaboration connection failed:", error);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [currentUser?.id, editor, loaded, navigate, pageId, workspaceId]);
+
+  function loadRemoteUpdate() {
+    if (!remoteUpdate || !editor) return;
+    setTitle(remoteUpdate.title);
+    setUpdatedByName(remoteUpdate.updatedBy?.name ?? "");
+    editor.commands.setContent(remoteUpdate.content ?? "", { emitUpdate: false });
+    isDirtyRef.current = false;
+    setRemoteUpdate(null);
+  }
+
   if (!editor || !loaded) return null;
 
  return (
   <div className="min-h-screen bg-[#FAF8F3] px-10 py-6 pb-28">
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white border border-black/5 text-sm text-[#1B1E2A]/80 shadow-sm hover:bg-black/[0.02] transition-colors"
-          >
-            <ArrowLeft size={14} />
-            Back
-          </button>
-          <span className="text-sm text-[#1B1E2A]/40 font-mono tracking-tight">
-            Notes / <span className="text-[#1B1E2A]/60">{title || "Untitled"}</span>
-          </span>
-        </div>
+    <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white border border-black/5 text-sm text-[#1B1E2A]/80 shadow-sm hover:bg-black/[0.02] transition-colors"
+        >
+          <ArrowLeft size={14} />
+          Back
+        </button>
+        <span className="text-sm text-[#1B1E2A]/40 font-mono tracking-tight">
+          Notes / <span className="text-[#1B1E2A]/60">{title || "Untitled"}</span>
+        </span>
+      </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-sm text-[#1B1E2A]/50">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                saveStatus === "saving" ? "bg-[#E2A63B]" : "bg-emerald-500"
-              }`}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5 text-sm text-[#1B1E2A]/50">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              saveStatus === "saving"
+                ? "bg-[#E2A63B]"
+                : saveStatus === "error"
+                  ? "bg-[#B4553F]"
+                  : "bg-emerald-500"
+            }`}
+          />
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved" : ""}
+          {saveStatus === "error" ? "Save failed" : ""}
+        </div>
+        <button className="p-1.5 rounded-full hover:bg-black/5 text-[#1B1E2A]/60 transition-colors">
+          <MoreVertical size={18} />
+        </button>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-6 px-5">
+      <div className="flex-1 min-w-0 pr-40">
+        <div className="flex items-center gap-3 mb-2">
+          <input
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="Untitled"
+            className="font-serif text-[42px] leading-tight font-semibold text-[#1B1E2A] flex-1 min-w-0 bg-transparent outline-none placeholder:text-[#1B1E2A]/25"
+          />
+
+          <div className="flex items-center gap-2">
+            <ButtonComponent
+              icon={Sparkles}
+              className="!bg-[#FAF8F3] !text-[#1B1E2A] !rounded-full !border !border-black/10 hover:!bg-[#F4EED8] shrink-0"
+              onClick={() => {
+                setShowChatSidebar(true);
+                setChatSessionKey((prev) => prev + 1);
+              }}
             />
-            {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved" : ""}
+
+            <ButtonComponent
+              icon={Trash2}
+              className="!bg-[#1B1E2A] !rounded-full hover:!bg-black shrink-0"
+              onClick={async () => {
+                const token = localStorage.getItem("token");
+                await api.delete(`/page/${pageId}`, {
+                  headers: { Authorization: token },
+                });
+                navigate("/dashboard");
+              }}
+            />
           </div>
-          <button className="p-1.5 rounded-full hover:bg-black/5 text-[#1B1E2A]/60 transition-colors">
-            <MoreVertical size={18} />
-          </button>
         </div>
-      </div>
 
-      <div className="flex items-center gap-3 mb-2">
-        <input
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          placeholder="Untitled"
-          className="font-serif text-[42px] leading-tight font-semibold text-[#1B1E2A] flex-1 bg-transparent outline-none placeholder:text-[#1B1E2A]/25"
-        />
-
-        <div className="flex items-center gap-2">
-          <ButtonComponent
-            icon={Sparkles}
-            className="!bg-[#FAF8F3] !text-[#1B1E2A] !rounded-full !border !border-black/10 hover:!bg-[#F4EED8] shrink-0"
-            onClick={() => {
-              setShowChatSidebar(true);
-              setChatSessionKey((prev) => prev + 1);
-            }}
-          />
-
-          <ButtonComponent
-            icon={Trash2}
-            className="!bg-[#1B1E2A] !rounded-full hover:!bg-black shrink-0"
-            onClick={async () => {
-              const token = localStorage.getItem("token");
-              await api.delete(`/page/${pageId}`, {
-                headers: { Authorization: token },
-              });
-              navigate("/dashboard");
-            }}
-          />
+        <div className="flex items-center gap-3 text-sm text-[#1B1E2A]/40 mb-6">
+          <span>Notes</span>
+          {(updatedByName || createdByName) && (
+            <span>Last edited by {updatedByName || createdByName}</span>
+          )}
+          {remoteUpdate && (
+            <button
+              type="button"
+              onClick={loadRemoteUpdate}
+              className="rounded-full bg-[#F5D9A0] px-2 py-0.5 text-xs text-[#1B1E2A] hover:bg-[#EBC779]"
+            >
+              Load latest from {remoteUpdate.updatedBy?.name ?? "a collaborator"}
+            </button>
+          )}
+          {aiAdded && (
+            <span className="text-xs font-medium text-[#8A5A16] bg-[#F5D9A0] px-2 py-0.5 rounded-full">
+              AI-added
+            </span>
+          )}
         </div>
-      </div>
 
-      <div className="flex items-center gap-3 text-sm text-[#1B1E2A]/40 mb-6">
-        <span>Notes</span>
-        <span>Edited just now</span>
-      </div>
+        <div className="h-px bg-black/[0.06] mb-6" />
 
-      <div className="h-px bg-black/[0.06] mb-6" />
-
-      <div className="flex items-start gap-6">
-        <div className="flex-1 bg-white rounded-2xl border border-black/[0.06] shadow-sm px-8 py-6">
+        <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm px-8 py-6">
           <EditorContent
             editor={editor}
             className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
           />
         </div>
-
-        {showChatSidebar && (
-          <ChatSidebar key={chatSessionKey} pageId={pageId} />
-        )}
       </div>
+
+      {showChatSidebar && (
+        <ChatSidebar
+          key={chatSessionKey}
+          pageId={pageId}
+          noteTitle={title}
+          onAddToNote={handleAddToNote}
+        />
+      )}
     </div>
 
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#1B1E2A] rounded-full px-2 py-2 shadow-xl z-50">
@@ -329,7 +443,7 @@ export default function NotePage() {
               className="w-full px-2 py-1.5 text-sm border border-black/10 rounded-md outline-none mb-2"
             />
             <div className="max-h-40 overflow-y-auto flex flex-col gap-0.5">
-              {pagesRef.current
+              {pages
                 .filter((p) => p.title.toLowerCase().includes(linkQuery.toLowerCase()))
                 .map((p) => (
                   <button
@@ -341,7 +455,7 @@ export default function NotePage() {
                   </button>
                 ))}
 
-              {linkQuery.trim() && !pagesRef.current.some(
+              {linkQuery.trim() && !pages.some(
                 (p) => p.title.toLowerCase() === linkQuery.trim().toLowerCase()
               ) && (
                 <button

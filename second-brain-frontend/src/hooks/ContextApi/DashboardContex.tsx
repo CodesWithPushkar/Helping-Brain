@@ -22,6 +22,8 @@ export type WorkspaceOption = {
   count: number;
   pages: PageOption[];
   iconColor: string;
+  isOwner: boolean;
+  ownerName: string;
 };
 
 type DashboardContextType = {
@@ -32,7 +34,7 @@ type DashboardContextType = {
   workspaces: WorkspaceOption[];
   setWorkspaces: React.Dispatch<React.SetStateAction<WorkspaceOption[]>>;
   selectedWorkspace: WorkspaceOption | null;
-  setSelectedWorkspace: (workspace: WorkspaceOption) => void;
+  setSelectedWorkspace: (workspace: WorkspaceOption | null) => void;
   pages: PageOption[];
   setPages: React.Dispatch<React.SetStateAction<PageOption[]>>;
   selectedPage: PageOption | null;

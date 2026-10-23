@@ -5,6 +5,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "dev": "tsx watch src/app.ts",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "start": "node dist/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -20,6 +23,7 @@
     "google-auth-library": "^10.9.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.22.0",
+    "socket.io": "^4.8.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -28,6 +32,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.1",
     "prisma": "^7.8.0",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
 }

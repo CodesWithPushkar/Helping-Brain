@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import NotePage from "./pages/Notepage";
+import JoinWorkspace from "./pages/JoinWorkspace";
 
 
 
@@ -13,6 +14,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/signin" replace />} />
         <Route path="/signin" element={<Login />} />
+        <Route path="/join/:token" element={<JoinWorkspace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/notes/:id" element={<NotePage />} />
       </Routes>
@@ -22,6 +24,5 @@ function App() {
 }
 
 export default App;
-
 
 

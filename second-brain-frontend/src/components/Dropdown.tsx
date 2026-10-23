@@ -28,7 +28,25 @@ export default function Dropdown({ options, selected, onSelect, onClickAdd }: Wo
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!selected) return null; 
+  if (!selected) {
+    return (
+      <div className="relative inline-block w-full font-sans rounded-lg bg-[#22213c] p-3" ref={dropdownRef}>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-[#4b4a69] px-3 py-3 text-left">
+          <div className="flex flex-col">
+            <span className="text-white text-[15px] font-semibold">No workspace yet</span>
+            <span className="text-[#8689a7] text-[12px] mt-1">Create your first workspace</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClickAdd}
+            className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-[#13142b] hover:bg-slate-200 transition-colors"
+          >
+            + Add
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     
@@ -84,7 +102,11 @@ export default function Dropdown({ options, selected, onSelect, onClickAdd }: Wo
                     <span className="text-white text-[14px] font-medium flex-1">{option.title}</span>
                     
                   </button>
-                  <button className="px-3 hover:bg-[#3b395e] transition-colors rounded-sm" onClick={async () => {
+                  {option.isOwner && <button
+                    type="button"
+                    aria-label={`Delete ${option.title}`}
+                    className="px-3 hover:bg-[#3b395e] transition-colors rounded-sm"
+                    onClick={async () => {
                     const token = localStorage.getItem('token');
                     const res = await api.delete(`/workspace/${option.id}`, {
                       headers: {
@@ -102,7 +124,7 @@ export default function Dropdown({ options, selected, onSelect, onClickAdd }: Wo
                     }
                   }}>
                     {<Trash2 color="white"/>}
-                  </button>
+                  </button>}
                 </div>
               </li>
             ))}

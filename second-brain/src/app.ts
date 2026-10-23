@@ -8,28 +8,41 @@ import { prisma } from './prismaClient.js';
 import jwt, { type JwtPayload } from 'jsonwebtoken'
 import { z } from 'zod';
 import axios from 'axios';
+import { createServer } from 'node:http';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { Server } from 'socket.io';
 
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT ?? 3000);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
+const FRONTEND_URL = process.env.FRONTEND_URL;
+if (!FRONTEND_URL) throw new Error('FATAL: FRONTEND_URL environment variable is missing.');
+
+const allowedOrigins = FRONTEND_URL
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+if (allowedOrigins.length === 0) throw new Error('FATAL: FRONTEND_URL must contain at least one origin.');
+
 app.use(cors({
-  origin: true,
+  origin: allowedOrigins,
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],              
 }));
 
 const GOOGLE_CLIENT_ID = process.env["GOOGLE_CLIENT_ID"];
-const JWT_SECRET = process.env.JWT_SECRET!; 
+const JWT_SECRET = process.env.JWT_SECRET;
 
 if(!GOOGLE_CLIENT_ID) throw new Error('FATAL: GOOGLE_CLIENT_ID environment variable is missing.');
+if(!JWT_SECRET) throw new Error('FATAL: JWT_SECRET environment variable is missing.');
 
-const client = new OAuth2Client('GOOGLE_CLIENT_ID');
+const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 
 const workspaceSchema = z.object({
@@ -60,7 +73,95 @@ const chatSchema = z.object({
   page_id: z.coerce.number().int(),
 });
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
+const AI_SERVICE_TOKEN = process.env.AI_SERVICE_TOKEN;
+
+if (!AI_SERVICE_URL) throw new Error('FATAL: AI_SERVICE_URL environment variable is missing.');
+if (!AI_SERVICE_TOKEN) throw new Error('FATAL: AI_SERVICE_TOKEN environment variable is missing.');
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+  },
+});
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (typeof token !== "string") return next(new Error("Unauthorized"));
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    if (typeof decoded.email !== "string") return next(new Error("Unauthorized"));
+    socket.data.email = decoded.email;
+    next();
+  } catch {
+    next(new Error("Unauthorized"));
+  }
+});
+
+io.on("connection", (socket) => {
+  socket.on("workspace:join", async (
+    payload: { workspaceId: number },
+    acknowledge?: (response: { success: boolean; error?: string }) => void,
+  ) => {
+    if (!Number.isInteger(payload?.workspaceId)) {
+      acknowledge?.({ success: false, error: "Invalid workspace ID" });
+      return;
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email: socket.data.email },
+        select: { id: true },
+      });
+      if (!user) {
+        acknowledge?.({ success: false, error: "Unauthorized" });
+        return;
+      }
+
+      const workspace = await prisma.workspace.findFirst({
+        where: {
+          id: payload.workspaceId,
+          is_deleted: false,
+          OR: [
+            { owner_id: user.id },
+            { members: { some: { user_id: user.id } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!workspace) {
+        acknowledge?.({ success: false, error: "Forbidden" });
+        return;
+      }
+
+      await socket.join(`workspace:${workspace.id}`);
+      acknowledge?.({ success: true });
+    } catch (error) {
+      console.error("Workspace socket join failed:", error);
+      acknowledge?.({ success: false, error: "Unable to join workspace" });
+    }
+  });
+});
+
+const workspaceAccessFilter = (userId: number) => ({
+  OR: [
+    { owner_id: userId },
+    { members: { some: { user_id: userId } } },
+  ],
+});
+
+const matchesAiServiceToken = (candidate: string | undefined) => {
+  if (!candidate) return false;
+  const expected = Buffer.from(AI_SERVICE_TOKEN);
+  const received = Buffer.from(candidate);
+  return expected.length === received.length && timingSafeEqual(expected, received);
+};
+
+const inviteTokenHash = (token: string) =>
+  createHash("sha256").update(token).digest("hex");
 
 
 
@@ -207,9 +308,17 @@ app.post('/api/create/page', auth, async (req,res) => {
 
   try{
 
-    const workspace = await prisma.workspace.findUnique({
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    const workspace = await prisma.workspace.findFirst({
       where: {
-        id: result.data.workspaceId
+        id: result.data.workspaceId,
+        is_deleted: false,
+        ...workspaceAccessFilter(user.id),
       }
     })
 
@@ -225,7 +334,9 @@ app.post('/api/create/page', auth, async (req,res) => {
           title: result.data.title,
           workspace_id: result.data.workspaceId,
           icon: result.data.icon,
-          color: result.data.color
+          color: result.data.color,
+          created_by_id: user.id,
+          updated_by_id: user.id,
         },
         include: {
           _count: {
@@ -238,7 +349,8 @@ app.post('/api/create/page', auth, async (req,res) => {
       const parentPage = await prisma.page.findFirst({
         where: {
           id: result.data.parentPageId,
-          workspace_id: result.data.workspaceId
+          workspace_id: result.data.workspaceId,
+          is_deleted: false,
         }
       })
 
@@ -249,7 +361,9 @@ app.post('/api/create/page', auth, async (req,res) => {
           workspace_id: result.data.workspaceId,
           parent_page_id: parentPage.id,
           icon: result.data.icon,
-          color: result.data.color
+          color: result.data.color,
+          created_by_id: user.id,
+          updated_by_id: user.id,
         },
         include: {
           _count: {
@@ -260,7 +374,7 @@ app.post('/api/create/page', auth, async (req,res) => {
 
     }
 
-    
+    io.to(`workspace:${workspace.id}`).emit("workspace:changed", { workspaceId: workspace.id });
 
     return res.status(200).json({ page: createdPage });
 
@@ -323,10 +437,20 @@ app.get("/api/workspace", auth, async (req, res) => {
 
     const workspaces = await prisma.workspace.findMany({
       where: {
-        owner_id: user.id,
-        is_deleted: false
+        is_deleted: false,
+        ...workspaceAccessFilter(user.id),
       },
       include: {
+        owner: {
+          select: { name: true },
+        },
+        members: {
+          include: {
+            user: {
+              select: { name: true },
+            },
+          },
+        },
         pages: {
           where: {
             is_deleted: false
@@ -343,10 +467,121 @@ app.get("/api/workspace", auth, async (req, res) => {
     });
 
     return res.status(200).json({
-      workspaces
+      workspaces: workspaces.map((workspace) => ({
+        ...workspace,
+        isOwner: workspace.owner_id === user.id,
+      })),
     })
   }catch(error){
     return res.status(401).json({ error: 'Internal server error' });
+  }
+});
+
+app.post("/api/workspace/:id/invite-link", auth, async (req, res) => {
+  const email = req.email;
+  const workspaceId = Number(req.params.id);
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  if (!Number.isInteger(workspaceId)) return res.status(400).json({ error: "Invalid workspace ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const workspace = await prisma.workspace.findFirst({
+      where: { id: workspaceId, owner_id: user.id, is_deleted: false },
+      select: { id: true },
+    });
+    if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+    const token = randomBytes(32).toString("base64url");
+    await prisma.workspaceInvite.upsert({
+      where: { workspace_id: workspace.id },
+      create: {
+        workspace_id: workspace.id,
+        token_hash: inviteTokenHash(token),
+      },
+      update: {
+        token_hash: inviteTokenHash(token),
+        created_at: new Date(),
+      },
+    });
+
+    const frontendOrigin = allowedOrigins[0];
+    return res.status(200).json({
+      inviteUrl: new URL(`/join/${token}`, frontendOrigin).toString(),
+    });
+  } catch (error) {
+    console.error("Workspace invite creation failed:", error);
+    return res.status(500).json({ error: "Unable to create invite link" });
+  }
+});
+
+app.delete("/api/workspace/:id/invite-link", auth, async (req, res) => {
+  const email = req.email;
+  const workspaceId = Number(req.params.id);
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  if (!Number.isInteger(workspaceId)) return res.status(400).json({ error: "Invalid workspace ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const workspace = await prisma.workspace.findFirst({
+      where: { id: workspaceId, owner_id: user.id, is_deleted: false },
+      select: { id: true },
+    });
+    if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+
+    await prisma.workspaceInvite.deleteMany({ where: { workspace_id: workspace.id } });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Workspace invite revocation failed:", error);
+    return res.status(500).json({ error: "Unable to revoke invite link" });
+  }
+});
+
+app.post("/api/workspace/invite/:token", auth, async (req, res) => {
+  const email = req.email;
+  const token = req.params.token;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  if (typeof token !== "string" || token.length !== 43) {
+    return res.status(404).json({ error: "Invite link is invalid or has been revoked" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const invite = await prisma.workspaceInvite.findUnique({
+      where: { token_hash: inviteTokenHash(token) },
+      select: { workspace_id: true },
+    });
+    if (!invite) return res.status(404).json({ error: "Invite link is invalid or has been revoked" });
+
+    const workspace = await prisma.workspace.findFirst({
+      where: { id: invite.workspace_id, is_deleted: false },
+      select: { id: true, name: true },
+    });
+    if (!workspace) return res.status(404).json({ error: "Workspace is unavailable" });
+
+    await prisma.workspaceMember.upsert({
+      where: {
+        workspace_id_user_id: {
+          workspace_id: workspace.id,
+          user_id: user.id,
+        },
+      },
+      create: {
+        workspace_id: workspace.id,
+        user_id: user.id,
+      },
+      update: {},
+    });
+
+    return res.status(200).json({ success: true, workspace });
+  } catch (error) {
+    console.error("Workspace invite join failed:", error);
+    return res.status(500).json({ error: "Unable to join workspace" });
   }
 });
 
@@ -367,10 +602,16 @@ app.get("/api/page/:id", auth, async (req, res) => {
     const page = await prisma.page.findFirst({
       where: { 
         id: Number(req.params.id),
+        is_deleted: false,
         workspace: {
-          owner_id: user.id
+          is_deleted: false,
+          ...workspaceAccessFilter(user.id),
         }
        },
+      include: {
+        created_by: { select: { id: true, name: true } },
+        updated_by: { select: { id: true, name: true } },
+      },
     });
 
     if (!page) return res.status(404).json({ error: "Not found" });
@@ -404,9 +645,20 @@ app.get("/api/notes/search", auth, async(req, res) => {
       }
     });
 
-    if(!workspace){
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!workspace || !user || workspace.is_deleted || (
+      workspace.owner_id !== user.id &&
+      !(await prisma.workspaceMember.findUnique({
+        where: {
+          workspace_id_user_id: {
+            workspace_id: workspace.id,
+            user_id: user.id,
+          },
+        },
+      }))
+    )) {
       return res.status(403).json({
-        error: "No workspace found with this id"
+        error: "Forbidden"
       });
     }
 
@@ -414,14 +666,13 @@ app.get("/api/notes/search", auth, async(req, res) => {
     const notes = await prisma.page.findMany({
       where: {
         workspace_id: Number(workspaceId),
+        is_deleted: false,
         title: {
           contains: q,
           mode: 'insensitive'
         }
       }
     });
-
-    console.log(notes);
 
     return res.status(200).json(notes);
 
@@ -444,7 +695,8 @@ app.get("/api/pages", auth, async (req, res) => {
     const pages = await prisma.page.findMany({
       where: {
         workspace_id: workspaceId,
-        workspace: { owner_id: user.id },
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
       },
       select: { id: true, title: true },
     });
@@ -475,7 +727,10 @@ app.get("/api/ai/chats", auth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Internal error" });
 
     const page = await prisma.page.findFirst({
-      where: { id: page_id, workspace: { owner_id: user.id } },
+      where: {
+        id: page_id,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
       select: { id: true },
     });
     if (!page) return res.status(403).json({ error: "Forbidden" });
@@ -512,7 +767,10 @@ app.get("/api/ai/chat/:id", auth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Internal error" });
 
     const chat = await prisma.chat.findFirst({
-      where: { id, page: { workspace: { owner_id: user.id } } },
+      where: {
+        id,
+        page: { workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) } },
+      },
       include: { messages: { orderBy: { id: "asc" } } },
     });
     if (!chat) return res.status(404).json({ error: "Chat not found" });
@@ -530,6 +788,10 @@ app.get("/api/ai/chat/:id", auth, async (req, res) => {
 
 
 app.post("/api/ai/page", async (req, res) => {
+  if (!matchesAiServiceToken(req.header("x-ai-service-token"))) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const result = getPageAiSchema.safeParse(req.body);
 
   if (!result.success) {
@@ -546,8 +808,10 @@ app.post("/api/ai/page", async (req, res) => {
         id: pageId,
         workspace: {
           id: workspaceId,
-          owner_id: userId,
+          is_deleted: false,
+          ...workspaceAccessFilter(userId),
         },
+        is_deleted: false,
       },
     });
 
@@ -590,7 +854,7 @@ app.post("/api/ai/newchat", auth, async (req, res) => {
     const page = await prisma.page.findFirst({
       where: {
         id: page_id,
-        workspace: { owner_id: user.id },
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
       },
       select: { id: true, workspace_id: true },
     });
@@ -628,12 +892,20 @@ app.post("/api/ai/newchat", auth, async (req, res) => {
         workspaceId: page.workspace_id,
         pageId: page_id,
         message,
+        summary: null,
+        last_summary_count: 0,
         history: [],
+
+      }, {
+        headers: { "x-ai-service-token": AI_SERVICE_TOKEN },
       });
 
       aiText = llmRes.data.answer;
     } catch (aiError) {
-      console.error("AI service error:", aiError);
+      console.error(
+        "AI service error:",
+        aiError instanceof Error ? aiError.message : "Unknown error",
+      );
       aiText = "Sorry, I couldn't reach the assistant just now. Please try again.";
     }
 
@@ -690,7 +962,7 @@ app.post("/api/ai/chat/:id", auth, async (req, res) => {
     const chat = await prisma.chat.findFirst({
       where: {
         id,
-        page: { workspace: { owner_id: user.id } },
+        page: { workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) } },
       },
       include: {
         messages: { orderBy: { id: "asc" } },
@@ -700,6 +972,12 @@ app.post("/api/ai/chat/:id", auth, async (req, res) => {
 
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
+    const unsummarized = chat.messages.filter((m) => {
+      return chat.messages.indexOf(m) >= chat.last_summary_count;
+    });
+
+
+
     const userMessage = await prisma.chatMessage.create({
       data: {
         role: "user",
@@ -708,10 +986,12 @@ app.post("/api/ai/chat/:id", auth, async (req, res) => {
       },
     });
 
-    const history = chat.messages.map((m) => ({
+    const history = unsummarized.map((m) => ({
       role: m.role,
       content: m.content,
     }));
+
+    const messageCountSinceSummary = unsummarized.length + 1;
 
     let aiText: string;
     try {
@@ -721,10 +1001,41 @@ app.post("/api/ai/chat/:id", auth, async (req, res) => {
         pageId: page_id,
         message,
         history,
+        summary: chat.summary || null,
+        last_summary_count: messageCountSinceSummary || 0
+      }, {
+        headers: { "x-ai-service-token": AI_SERVICE_TOKEN },
       });
+
       aiText = llmRes.data.answer;
+
+      if(llmRes.data.summaryCreated){
+        const newLastSummaryCount = chat.last_summary_count + messageCountSinceSummary;
+        await prisma.chat.update({
+          where: {
+            id,
+          },
+          data:{
+            summary: llmRes.data.summary,
+            last_summary_count: newLastSummaryCount
+        }
+      })}
+      
+
+
     } catch (aiError) {
-      console.error("AI service error:", aiError);
+      if (axios.isAxiosError(aiError)){
+        if (aiError.response?.data?.detail){
+          console.error("FastAPI Validation Error:", JSON.stringify(aiError.response.data.detail, null, 2));
+        } else {
+          console.error("AI service HTTP error:", aiError.message);
+        }
+      } else {
+        console.error(
+          "Unknown AI service error:",
+          aiError instanceof Error ? aiError.message : "Unknown error",
+        );
+      }
       aiText = "Sorry, I couldn't reach the assistant just now. Please try again.";
     }
 
@@ -761,12 +1072,40 @@ app.patch("/api/page/:id", auth, async (req, res) => {
   }
 
   try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const page = await prisma.page.findFirst({
+      where: {
+        id: Number(req.params.id),
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
+      select: { id: true, workspace_id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
     const updated = await prisma.page.update({
-      where: { id: Number(req.params.id) },
+      where: { id: page.id },
       data: {
         ...(result.data.title !== undefined && { title: result.data.title }),
         ...(result.data.content !== undefined && { content: result.data.content }),
+        updated_by_id: user.id,
       },
+      include: {
+        updated_by: { select: { id: true, name: true } },
+      },
+    });
+
+    io.to(`workspace:${page.workspace_id}`).emit("page:updated", {
+      pageId: updated.id,
+      title: updated.title,
+      content: updated.content,
+      updatedAt: updated.updated_at,
+      updatedBy: updated.updated_by,
+    });
+    io.to(`workspace:${page.workspace_id}`).emit("workspace:changed", {
+      workspaceId: page.workspace_id,
     });
 
     return res.status(200).json({ page: updated });
@@ -781,9 +1120,13 @@ app.delete("/api/workspace/:id", auth, async (req, res) => {
   if (!email) return res.status(401).json({ error: "Internal error" });
   try {
     const id = Number(req.params.id);
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
     const update = await prisma.workspace.update({
       where: {
-        id
+        id,
+        owner_id: user.id,
       },
       data: {
         is_deleted: true
@@ -806,15 +1149,31 @@ app.delete("/api/page/:id", auth, async (req, res) => {
   if (!email) return res.status(401).json({ error: "Internal error" });
   try {
     const id = Number(req.params.id);
-    const update = await prisma.page.update({
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const page = await prisma.page.findFirst({
       where: {
-        id
+        id,
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
       },
+      select: { id: true, workspace_id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
+    const update = await prisma.page.update({
+      where: { id: page.id },
       data: {
-        is_deleted: true
+        is_deleted: true,
+        updated_by_id: user.id,
       }
     })
 
+    io.to(`workspace:${page.workspace_id}`).emit("page:deleted", { pageId: page.id });
+    io.to(`workspace:${page.workspace_id}`).emit("workspace:changed", {
+      workspaceId: page.workspace_id,
+    });
 
     res.status(200).json({
       update
@@ -828,6 +1187,6 @@ app.delete("/api/page/:id", auth, async (req, res) => {
 
 
 
-app.listen(port, () => {
-  console.log(`Listning in port ${port}`)
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`Listening on port ${port}`);
 });

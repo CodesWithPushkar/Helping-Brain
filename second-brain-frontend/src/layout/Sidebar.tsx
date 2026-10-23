@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { Search, Share2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import Dropdown from "../components/Dropdown";
 import SearchComponent from "../components/SearchComponent";
@@ -11,9 +11,11 @@ import NewWorkspaceForm from "../components/WorkspaceForm";
 import api from "../api/axios";
 import { getInitials, workspacePalette } from "../hooks/useEffect/useWorkspace";
 import { userDetails } from "../hooks/useEffect/useUser";
+import ShareWorkspaceModal from "../components/ShareWorkspaceModal";
 
 const Sidebar = () => {
   const [addWorkshop, setAddWorkshop] = useState<boolean>(false);
+  const [shareWorkspace, setShareWorkspace] = useState(false);
   const user = userDetails().user;
   const navigate = useNavigate();
   const { 
@@ -39,7 +41,7 @@ const Sidebar = () => {
       setSelectedWorkspace(workspaces[0]);
       setPages(workspaces[0].pages);
     }
-  }, [workspaces, selectedWorkspace, setSelectedWorkspace]);
+  }, [workspaces, selectedWorkspace, setPages, setSelectedWorkspace]);
 
   return (
     <>
@@ -64,6 +66,17 @@ const Sidebar = () => {
                 setAddWorkshop(true);
               }}
             />
+          )}
+
+          {selectedWorkspace?.isOwner && (
+            <button
+              type="button"
+              onClick={() => setShareWorkspace(true)}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <Share2 size={15} />
+              Share workspace
+            </button>
           )}
           
           <SearchComponent icon={Search} placeholder="Search notes" bgColor="bg-[#22213c]" iconColor="text-white" className="my-4" />
@@ -122,12 +135,23 @@ const Sidebar = () => {
           pages: newWorkspace.pages ?? [],     
           count: newWorkspace.pages?.length ?? 0,
           iconColor: workspacePalette[prev.length % workspacePalette.length],
+          isOwner: true,
+          ownerName: user?.name ?? "",
 
         }]);
 
         
         setAddWorkshop(false);
       }}/>}
+      {selectedWorkspace && (
+        <ShareWorkspaceModal
+          key={selectedWorkspace.id}
+          isOpen={shareWorkspace}
+          workspaceId={Number(selectedWorkspace.id)}
+          workspaceName={selectedWorkspace.title}
+          onClose={() => setShareWorkspace(false)}
+        />
+      )}
     </>
   );
 }

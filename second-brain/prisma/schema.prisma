@@ -16,6 +16,9 @@ model User {
   updated_at  DateTime @updatedAt
   picture_url String
   workspace   Workspace[]
+  workspace_memberships WorkspaceMember[]
+  created_pages Page[] @relation("PageCreator")
+  edited_pages Page[] @relation("PageEditor")
 }
 
 model Workspace {
@@ -26,10 +29,29 @@ model Workspace {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   pages      Page[]
+  members    WorkspaceMember[]
+  invite_link WorkspaceInvite?
   is_deleted Boolean @default(false)
   
-
   @@index([owner_id])
+}
+
+model WorkspaceMember {
+  workspace_id Int
+  user_id      Int
+  joined_at    DateTime @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user         User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([workspace_id, user_id])
+  @@index([user_id])
+}
+
+model WorkspaceInvite {
+  workspace_id Int @id
+  token_hash   String @unique
+  created_at   DateTime @default(now())
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
 
 model Page {
@@ -43,6 +65,10 @@ model Page {
   parent_page_id Int?
   parent         Page?    @relation("PageHierarchy", fields: [parent_page_id], references: [id])
   children       Page[]   @relation("PageHierarchy")
+  created_by_id  Int?
+  created_by     User?    @relation("PageCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  updated_by_id  Int?
+  updated_by     User?    @relation("PageEditor", fields: [updated_by_id], references: [id], onDelete: SetNull)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
   is_deleted Boolean @default(false)
@@ -59,13 +85,15 @@ model Chat {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
   messages     ChatMessage[]
+  summary      String? @db.Text
+  last_summary_count Int @default(0)
 }
 
 model ChatMessage {
   id         Int      @id @default(autoincrement())
   role       String   
   content    String
-  chat_id    Int
+  chat_id    Int  
   chat       Chat @relation(fields: [chat_id], references: [id])
   created_at DateTime @default(now())
 }
