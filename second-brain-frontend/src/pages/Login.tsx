@@ -1,13 +1,15 @@
 import { GoogleLogin } from "@react-oauth/google";
+import axios from "axios";
+import { useState } from "react";
 import api from '../api/axios';
 import { useNavigate } from 'react-router-dom'
 
 
 
-
-
 const Login = () => {
   const navigate = useNavigate();
+  const [signInError, setSignInError] = useState("");
+
   return <>
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-paper px-4 py-8 sm:px-6">
       <h1 className="font-serif text-[32px] font-semibold text-black mb-8 text-center sm:text-[40px] sm:mb-10">Helping Brain</h1>
@@ -18,7 +20,12 @@ const Login = () => {
 
           <GoogleLogin
             onSuccess={async (credentialResponse) => {
+              setSignInError("");
               try {
+                if (!credentialResponse.credential) {
+                  throw new Error("Google did not return an ID token. Please try again.");
+                }
+
                 const response = await api.post("/auth/google", {
                     token: credentialResponse.credential,
                 });
@@ -33,10 +40,16 @@ const Login = () => {
                   "Google sign-in request failed:",
                   error instanceof Error ? error.message : "Unknown error",
                 );
+                const message = axios.isAxiosError<{ error?: string }>(error)
+                  ? error.response?.data?.error || error.message
+                  : error instanceof Error
+                    ? error.message
+                    : "Google sign-in failed. Please try again.";
+                setSignInError(message);
               }
             }}
             onError={() => {
-              console.log("Google Login Failed");
+              setSignInError("Google sign-in failed. Please try again.");
             }}
             theme="outline"
             size="large"
@@ -44,6 +57,12 @@ const Login = () => {
             shape="rectangular"
             width="380"
           />
+
+          {signInError && (
+            <p role="alert" className="mt-3 text-sm text-red-700">
+              {signInError}
+            </p>
+          )}
 
 
           <div className="flex items-center gap-3 my-6 text-[12px] font-mono text-[#A7A38F]">

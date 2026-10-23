@@ -126,7 +126,7 @@ Configure local secrets in untracked `.env` files. Never commit or share them.
 **Frontend** (`second-brain-frontend/.env.local`):
 
 ```env
-VITE_API_URL=http://localhost:3000/api
+VITE_API_URL=http://localhost:3000
 VITE_GOOGLE_CLIENT_ID=
 ```
 
@@ -162,7 +162,7 @@ Deploy the three services separately from this repository. The Python service ca
 - **Root Directory:** `second-brain-frontend`
 - **Build Command:** `npm ci && npm run build`
 - **Publish Directory:** `dist`
-- **Environment:** `VITE_API_URL=https://<node-service>.onrender.com/api`, `VITE_GOOGLE_CLIENT_ID=<Google OAuth web client ID>`
+- **Environment:** `VITE_API_URL=https://<node-service>.onrender.com` (the frontend adds `/api` automatically; an existing `/api` suffix is also accepted), `VITE_GOOGLE_CLIENT_ID=<Google OAuth web client ID>`
 - Add a Render rewrite from `/*` to `/index.html` so React Router invite links work when opened directly.
 
 ### Web service — Node.js API
