@@ -152,7 +152,7 @@ export default function ChatSidebar({ pageId, noteTitle, onAddToNote }: ChatSide
   }
 
   return (
-    <div className="relative w-96 shrink-0 h-[calc(100vh-3rem)] sticky top-6 flex flex-col bg-white rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden">
+    <div className="fixed inset-2 z-40 flex h-[calc(100dvh-1rem)] w-auto flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-xl md:sticky md:inset-auto md:top-6 md:z-auto md:h-[calc(100vh-3rem)] md:w-96 md:shrink-0 md:rounded-2xl md:shadow-sm">
       <div className="px-5 pt-5 pb-4 border-b border-black/[0.06]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[#1B1E2A]/35">

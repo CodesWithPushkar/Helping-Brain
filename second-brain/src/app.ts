@@ -51,7 +51,12 @@ const workspaceSchema = z.object({
 
 const updatePageSchema = z.object({
   title: z.string().min(1).optional(),
-  content: z.any().optional(), 
+  content: z.any().optional(),
+  expectedRevision: z.number().int().nonnegative().optional(),
+});
+
+const stickyNoteSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
 });
 
 const pageSchema = z.object({
@@ -627,6 +632,236 @@ app.get("/api/page/:id", auth, async (req, res) => {
   }
 });
 
+app.get("/api/page/:id/sticky-notes", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const pageId = Number(req.params.id);
+  if (!Number.isInteger(pageId)) return res.status(400).json({ error: "Invalid page ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const page = await prisma.page.findFirst({
+      where: {
+        id: pageId,
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
+      select: { id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
+    const stickyNotes = await prisma.stickyNote.findMany({
+      where: { page_id: page.id },
+      orderBy: { created_at: "asc" },
+      include: { created_by: { select: { id: true, name: true } } },
+    });
+    return res.status(200).json({ stickyNotes });
+  } catch (error) {
+    console.error("Sticky note fetch failed:", error);
+    return res.status(500).json({ error: "Unable to load sticky notes" });
+  }
+});
+
+app.post("/api/page/:id/sticky-notes", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const pageId = Number(req.params.id);
+  if (!Number.isInteger(pageId)) return res.status(400).json({ error: "Invalid page ID" });
+  const result = stickyNoteSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const page = await prisma.page.findFirst({
+      where: {
+        id: pageId,
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
+      select: { id: true, workspace_id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
+    const stickyNote = await prisma.stickyNote.create({
+      data: {
+        page_id: page.id,
+        created_by_id: user.id,
+        content: result.data.content,
+      },
+      include: { created_by: { select: { id: true, name: true } } },
+    });
+    io.to(`workspace:${page.workspace_id}`).emit("sticky-notes:changed", { pageId: page.id });
+    return res.status(201).json({ stickyNote });
+  } catch (error) {
+    console.error("Sticky note create failed:", error);
+    return res.status(500).json({ error: "Unable to create sticky note" });
+  }
+});
+
+app.patch("/api/sticky-notes/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const stickyNoteId = Number(req.params.id);
+  if (!Number.isInteger(stickyNoteId)) return res.status(400).json({ error: "Invalid sticky note ID" });
+  const result = stickyNoteSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const stickyNote = await prisma.stickyNote.findFirst({
+      where: {
+        id: stickyNoteId,
+        created_by_id: user.id,
+        page: {
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+      },
+      select: { id: true, page_id: true, page: { select: { workspace_id: true } } },
+    });
+    if (!stickyNote) return res.status(404).json({ error: "Sticky note not found" });
+
+    const updated = await prisma.stickyNote.update({
+      where: { id: stickyNote.id },
+      data: { content: result.data.content },
+      include: { created_by: { select: { id: true, name: true } } },
+    });
+    io.to(`workspace:${stickyNote.page.workspace_id}`).emit("sticky-notes:changed", {
+      pageId: stickyNote.page_id,
+    });
+    return res.status(200).json({ stickyNote: updated });
+  } catch (error) {
+    console.error("Sticky note update failed:", error);
+    return res.status(500).json({ error: "Unable to update sticky note" });
+  }
+});
+
+app.delete("/api/sticky-notes/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const stickyNoteId = Number(req.params.id);
+  if (!Number.isInteger(stickyNoteId)) return res.status(400).json({ error: "Invalid sticky note ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const stickyNote = await prisma.stickyNote.findFirst({
+      where: {
+        id: stickyNoteId,
+        created_by_id: user.id,
+        page: {
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+      },
+      select: { id: true, page_id: true, page: { select: { workspace_id: true } } },
+    });
+    if (!stickyNote) return res.status(404).json({ error: "Sticky note not found" });
+
+    await prisma.stickyNote.delete({ where: { id: stickyNote.id } });
+    io.to(`workspace:${stickyNote.page.workspace_id}`).emit("sticky-notes:changed", {
+      pageId: stickyNote.page_id,
+    });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Sticky note delete failed:", error);
+    return res.status(500).json({ error: "Unable to delete sticky note" });
+  }
+});
+
+const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+app.post(
+  "/api/page/:id/images",
+  auth,
+  express.raw({ type: "image/*", limit: "5mb" }),
+  async (req, res) => {
+    const email = req.email;
+    if (!email) return res.status(401).json({ error: "Unauthorized" });
+    const pageId = Number(req.params.id);
+    if (!Number.isInteger(pageId)) return res.status(400).json({ error: "Invalid page ID" });
+    const contentType = req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+    if (!contentType || !allowedImageTypes.has(contentType)) {
+      return res.status(415).json({ error: "Use a JPEG, PNG, GIF, or WebP image" });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: "Image data is required" });
+    }
+    const imageSignatures: Record<string, (data: Buffer) => boolean> = {
+      "image/jpeg": (data) => data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff,
+      "image/png": (data) => data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+      "image/gif": (data) => data.subarray(0, 6).toString("ascii").startsWith("GIF8"),
+      "image/webp": (data) => data.length >= 12 && data.subarray(0, 4).toString("ascii") === "RIFF" && data.subarray(8, 12).toString("ascii") === "WEBP",
+    };
+    if (!imageSignatures[contentType]?.(req.body)) {
+      return res.status(415).json({ error: "Image contents do not match the declared file type" });
+    }
+
+    try {
+      const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      const page = await prisma.page.findFirst({
+        where: {
+          id: pageId,
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+        select: { id: true },
+      });
+      if (!page) return res.status(404).json({ error: "Page not found" });
+
+      const image = await prisma.pageImage.create({
+        data: {
+          page_id: page.id,
+          created_by_id: user.id,
+          content_type: contentType,
+          data: Uint8Array.from(req.body),
+        },
+        select: { id: true },
+      });
+      return res.status(201).json({ imageId: image.id });
+    } catch (error) {
+      console.error("Page image upload failed:", error);
+      return res.status(500).json({ error: "Unable to save image" });
+    }
+  },
+);
+
+app.get("/api/page-images/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const imageId = Number(req.params.id);
+  if (!Number.isInteger(imageId)) return res.status(400).json({ error: "Invalid image ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const image = await prisma.pageImage.findFirst({
+      where: {
+        id: imageId,
+        page: {
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+      },
+      select: { data: true, content_type: true },
+    });
+    if (!image) return res.status(404).json({ error: "Image not found" });
+
+    res.setHeader("Content-Type", image.content_type);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    return res.status(200).send(Buffer.from(image.data));
+  } catch (error) {
+    console.error("Page image fetch failed:", error);
+    return res.status(500).json({ error: "Unable to load image" });
+  }
+});
+
 
 app.get("/api/notes/search", auth, async(req, res) => {
   const email = req.email;
@@ -1086,17 +1321,38 @@ app.patch("/api/page/:id", auth, async (req, res) => {
         is_deleted: false,
         workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
       },
-      select: { id: true, workspace_id: true },
+      select: { id: true, workspace_id: true, revision: true },
     });
     if (!page) return res.status(404).json({ error: "Page not found" });
 
-    const updated = await prisma.page.update({
-      where: { id: page.id },
+    const updateResult = await prisma.page.updateMany({
+      where: {
+        id: page.id,
+        ...(result.data.expectedRevision !== undefined && {
+          revision: result.data.expectedRevision,
+        }),
+      },
       data: {
         ...(result.data.title !== undefined && { title: result.data.title }),
         ...(result.data.content !== undefined && { content: result.data.content }),
         updated_by_id: user.id,
+        revision: { increment: 1 },
       },
+    });
+
+    if (updateResult.count === 0) {
+      const latest = await prisma.page.findUnique({
+        where: { id: page.id },
+        include: {
+          updated_by: { select: { id: true, name: true } },
+        },
+      });
+      if (!latest) return res.status(404).json({ error: "Page not found" });
+      return res.status(409).json({ error: "Page changed since it was loaded", page: latest });
+    }
+
+    const updated = await prisma.page.findUniqueOrThrow({
+      where: { id: page.id },
       include: {
         updated_by: { select: { id: true, name: true } },
       },
@@ -1107,6 +1363,7 @@ app.patch("/api/page/:id", auth, async (req, res) => {
       title: updated.title,
       content: updated.content,
       updatedAt: updated.updated_at,
+      revision: updated.revision,
       updatedBy: updated.updated_by,
     });
     io.to(`workspace:${page.workspace_id}`).emit("workspace:changed", {
@@ -1115,6 +1372,7 @@ app.patch("/api/page/:id", auth, async (req, res) => {
 
     return res.status(200).json({ page: updated });
   } catch (error) {
+    console.error("Page save failed:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -11,6 +11,23 @@
   outline: none; 
 }
 
+.ProseMirror a {
+  color: #443F76;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.ProseMirror [data-page-image] {
+  max-width: 100%;
+}
+
 .ProseMirror h1 {
   font-size: 32px;
   font-weight: 700;

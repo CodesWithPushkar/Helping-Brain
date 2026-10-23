@@ -9,18 +9,22 @@ import ts from "highlight.js/lib/languages/typescript";
 import python from "highlight.js/lib/languages/python";
 import java from "highlight.js/lib/languages/java";
 import cpp from "highlight.js/lib/languages/cpp";
+import axios from "axios";
 import api from "../api/axios";
 import "../editor.css";
 import { useParams, useNavigate } from "react-router-dom";
 import ButtonComponent from "../components/ButtonComponent";
-import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles } from "lucide-react";
+import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles, ExternalLink, ImagePlus, StickyNote as StickyNoteIcon } from "lucide-react";
 import PageLinkNode from "../extension/PageLinkNode";
+import PageImageNode from "../extension/PageImageNode";
 import ChatSidebar from "../layout/ChatSideBar";
+import PageStickyNotes from "../components/PageStickyNotes";
 import { markdownToTiptapHTML } from "../Markdowntotiptap";
 import { io } from "socket.io-client";
 import { apiOrigin } from "../api/axios";
 import { userDetails } from "../hooks/useEffect/useUser";
 import type { JSONContent } from "@tiptap/core";
+import { mergePageContent, mergeTextChanges } from "../utils/mergePageContent";
 
 const lowlight = createLowlight();
 lowlight.register("css", css);
@@ -36,6 +40,8 @@ type PageUpdateEvent = {
   pageId: number;
   title: string;
   content: JSONContent | string | null;
+  updatedAt: string;
+  revision: number;
   updatedBy: { id: number; name: string } | null;
 };
 
@@ -43,11 +49,20 @@ export default function NotePage() {
   const { id } = useParams();
   const pageId = id ?? "";
   const [title, setTitle] = useState("");
+  const titleRef = useRef("");
   const [loaded, setLoaded] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
+  const [externalLinkOpen, setExternalLinkOpen] = useState(false);
+  const [externalLinkUrl, setExternalLinkUrl] = useState("");
+  const [showStickyNotes, setShowStickyNotes] = useState(false);
+  const [stickyNotesReloadKey, setStickyNotesReloadKey] = useState(0);
+  const [imageError, setImageError] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [workspaceId, setWorkspaceId] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<"" | "saved" | "saving" | "error">("");
+  const [hasLocalDraft, setHasLocalDraft] = useState(false);
   const [createdByName, setCreatedByName] = useState("");
   const [updatedByName, setUpdatedByName] = useState("");
   const [remoteUpdate, setRemoteUpdate] = useState<PageUpdateEvent | null>(null);
@@ -55,6 +70,10 @@ export default function NotePage() {
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [aiAdded, setAiAdded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const baseContentRef = useRef<JSONContent | null>(null);
+  const baseTitleRef = useRef("");
+  const expectedRevisionRef = useRef<number | null>(null);
+  const remoteUpdateRef = useRef<PageUpdateEvent | null>(null);
   const navigate = useNavigate();
   const [pages, setPages] = useState<PageOption[]>([]);
   const isDirtyRef = useRef(false);
@@ -63,12 +82,33 @@ export default function NotePage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit.configure({
+        codeBlock: false,
+        link: {
+        openOnClick: true,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" },
+        },
+      }),
       CodeBlockLowlight.configure({ lowlight }),
       PageLinkNode((pageId) => navigate(`/notes/${pageId}`)),
+      PageImageNode,
     ],
     content: "",
+    editorProps: {
+      handlePaste: (_view, event) => {
+        const items = Array.from(event.clipboardData?.items ?? []).filter((item) =>
+          item.type.startsWith("image/"),
+        );
+        if (items.length === 0) return false;
+        event.preventDefault();
+        void insertPastedImages(items);
+        return true;
+      },
+    },
     onUpdate: () => {
+      if (!isDirtyRef.current) setHasLocalDraft(true);
       isDirtyRef.current = true;
       scheduleSave(title);
     },
@@ -81,16 +121,118 @@ export default function NotePage() {
 
     debounceRef.current = setTimeout(async () => {
       const token = localStorage.getItem("token");
+      let contentToSave: JSONContent | undefined = editor?.getJSON();
+      let titleToSave = currentTitle;
+      const pendingRemote = remoteUpdateRef.current;
+
+      if (pendingRemote) {
+        if (
+          !baseContentRef.current ||
+          typeof pendingRemote.content !== "object" ||
+          pendingRemote.content === null ||
+          !contentToSave
+        ) {
+          setSaveStatus("error");
+          return;
+        }
+
+        const mergedContent = mergePageContent(
+          baseContentRef.current,
+          contentToSave,
+          pendingRemote.content,
+        );
+        const mergedTitle = mergeTextChanges(
+          baseTitleRef.current,
+          currentTitle,
+          pendingRemote.title,
+        );
+        if (!mergedContent || mergedTitle === null) {
+          setSaveStatus("error");
+          return;
+        }
+
+        contentToSave = mergedContent;
+        titleToSave = mergedTitle;
+        if (editor) {
+          editor.commands.setContent(editor.schema.nodeFromJSON(mergedContent), {
+            emitUpdate: false,
+          });
+        }
+        setTitle(mergedTitle);
+        titleRef.current = mergedTitle;
+      }
+
       try {
         const response = await api.patch(
           `/page/${pageId}`,
-          { title: currentTitle, content: editor?.getJSON() },
+          {
+            title: titleToSave,
+            content: contentToSave,
+            ...(expectedRevisionRef.current !== null && {
+              expectedRevision: expectedRevisionRef.current,
+            }),
+          },
           { headers: { Authorization: token } }
         );
-        isDirtyRef.current = false;
+        const savedPage = response.data.page;
+        baseContentRef.current = savedPage.content;
+        baseTitleRef.current = savedPage.title;
+        expectedRevisionRef.current = savedPage.revision;
+        const pendingRemoteAfterSave = remoteUpdateRef.current;
+        if (pendingRemoteAfterSave && pendingRemoteAfterSave.revision <= savedPage.revision) {
+          remoteUpdateRef.current = null;
+          setRemoteUpdate(null);
+        }
+        isDirtyRef.current =
+          JSON.stringify(editor?.getJSON()) !== JSON.stringify(savedPage.content) ||
+          titleRef.current !== savedPage.title;
+        setHasLocalDraft(isDirtyRef.current);
         setUpdatedByName(response.data.page.updated_by?.name ?? currentUser?.name ?? "");
-        setSaveStatus("saved");
+        if (
+          !isDirtyRef.current &&
+          pendingRemoteAfterSave &&
+          pendingRemoteAfterSave.revision > savedPage.revision
+        ) {
+          setTitle(pendingRemoteAfterSave.title);
+          titleRef.current = pendingRemoteAfterSave.title;
+          baseTitleRef.current = pendingRemoteAfterSave.title;
+          baseContentRef.current =
+            typeof pendingRemoteAfterSave.content === "object" &&
+            pendingRemoteAfterSave.content !== null
+              ? pendingRemoteAfterSave.content
+              : { type: "doc", content: [] };
+          expectedRevisionRef.current = pendingRemoteAfterSave.revision;
+          editor?.commands.setContent(pendingRemoteAfterSave.content ?? "", {
+            emitUpdate: false,
+          });
+          setUpdatedByName(pendingRemoteAfterSave.updatedBy?.name ?? "");
+          remoteUpdateRef.current = null;
+          setRemoteUpdate(null);
+        }
+        setSaveStatus(isDirtyRef.current ? "saving" : "saved");
+        if (isDirtyRef.current) scheduleSave(titleRef.current);
       } catch (error) {
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.status === 409 &&
+          error.response.data?.page
+        ) {
+          const latestPage = error.response.data.page;
+          const latest: PageUpdateEvent = {
+            pageId: latestPage.id,
+            title: latestPage.title,
+            content: latestPage.content,
+            updatedAt: latestPage.updated_at,
+            revision: latestPage.revision,
+            updatedBy: latestPage.updated_by,
+          };
+          expectedRevisionRef.current = latest.revision;
+          remoteUpdateRef.current = latest;
+          setRemoteUpdate(latest);
+          setSaveStatus("saving");
+          scheduleSave(titleRef.current);
+          return;
+        }
         console.error(
           "Page save failed:",
           error instanceof Error ? error.message : "Unknown error",
@@ -101,9 +243,76 @@ export default function NotePage() {
   }
 
   function handleTitleChange(value: string) {
+    if (!isDirtyRef.current) setHasLocalDraft(true);
     isDirtyRef.current = true;
     setTitle(value);
+    titleRef.current = value;
     scheduleSave(value);
+  }
+
+  async function insertUploadedImage(file: File) {
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+      setImageError("Choose a JPEG, PNG, GIF, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError("Images must be 5 MB or smaller. The original image is kept without resizing.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await api.post(`/page/${pageId}/images`, file, {
+        headers: { Authorization: token, "Content-Type": file.type },
+      });
+      editor?.chain().focus().insertContent({
+        type: "pageImage",
+        attrs: { imageId: response.data.imageId, alt: file.name },
+      }).run();
+      setImageError("");
+    } catch (error) {
+      console.error("Page image upload failed:", error);
+      setImageError("Could not upload image. Please try again.");
+    }
+  }
+
+  async function insertPastedImages(items: DataTransferItem[]) {
+    for (const item of items) {
+      const file = item.getAsFile();
+      if (file) await insertUploadedImage(file);
+    }
+  }
+
+  function applyExternalLink() {
+    const rawUrl = externalLinkUrl.trim();
+    if (!rawUrl || !editor) return;
+
+    let href = rawUrl;
+    if (!/^(https?:|mailto:)/i.test(href)) href = `https://${href}`;
+    try {
+      const parsed = new URL(href);
+      if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+        setLinkError("Only web links and email links are supported.");
+        return;
+      }
+    } catch {
+      setLinkError("Enter a valid link.");
+      return;
+    }
+
+    const chain = editor.chain().focus();
+    if (editor.state.selection.empty) {
+      chain.insertContent({
+        type: "text",
+        text: rawUrl,
+        marks: [{ type: "link", attrs: { href } }],
+      }).run();
+    } else {
+      chain.extendMarkRange("link").setLink({ href }).run();
+    }
+    setExternalLinkUrl("");
+    setExternalLinkOpen(false);
+    setLinkError("");
   }
 
   function handleAddToNote(content: string) {
@@ -150,17 +359,25 @@ export default function NotePage() {
 
       const page = res.data.page;
       setTitle(page.title);
+      titleRef.current = page.title;
+      baseTitleRef.current = page.title;
+      baseContentRef.current = page.content ?? { type: "doc", content: [] };
+      expectedRevisionRef.current = page.revision;
+      remoteUpdateRef.current = null;
+      isDirtyRef.current = false;
       setWorkspaceId(page.workspace_id);
       setCreatedByName(page.created_by?.name ?? "");
       setUpdatedByName(page.updated_by?.name ?? page.created_by?.name ?? "");
 
-      editor?.commands.setContent(page.content ?? "");
+      editor?.commands.setContent(page.content ?? "", { emitUpdate: false });
 
       const workspacePagesRes = await api.get(`/pages?workspaceId=${page.workspace_id}`, {
         headers: { Authorization: token },
       });
       setPages(workspacePagesRes.data.pages);
 
+      isDirtyRef.current = false;
+      setHasLocalDraft(false);
       setLoaded(true);
     }
 
@@ -183,14 +400,31 @@ export default function NotePage() {
       if (String(update.pageId) !== pageId || update.updatedBy?.id === currentUser?.id) return;
 
       if (isDirtyRef.current || editor.isFocused) {
+        remoteUpdateRef.current = update;
         setRemoteUpdate(update);
         return;
       }
 
       setTitle(update.title);
+      titleRef.current = update.title;
+      baseTitleRef.current = update.title;
+      baseContentRef.current =
+        typeof update.content === "object" && update.content !== null
+          ? update.content
+          : { type: "doc", content: [] };
+      expectedRevisionRef.current = update.revision;
       setUpdatedByName(update.updatedBy?.name ?? "");
       editor.commands.setContent(update.content ?? "", { emitUpdate: false });
+      isDirtyRef.current = false;
+      setHasLocalDraft(false);
+      remoteUpdateRef.current = null;
       setRemoteUpdate(null);
+    });
+
+    socket.on("sticky-notes:changed", (event: { pageId: number }) => {
+      if (String(event.pageId) === pageId) {
+        setStickyNotesReloadKey((key) => key + 1);
+      }
     });
 
     socket.on("page:deleted", (event: { pageId: number }) => {
@@ -209,18 +443,27 @@ export default function NotePage() {
   function loadRemoteUpdate() {
     if (!remoteUpdate || !editor) return;
     setTitle(remoteUpdate.title);
+    titleRef.current = remoteUpdate.title;
+    baseTitleRef.current = remoteUpdate.title;
+    baseContentRef.current =
+      typeof remoteUpdate.content === "object" && remoteUpdate.content !== null
+        ? remoteUpdate.content
+        : { type: "doc", content: [] };
+    expectedRevisionRef.current = remoteUpdate.revision;
     setUpdatedByName(remoteUpdate.updatedBy?.name ?? "");
     editor.commands.setContent(remoteUpdate.content ?? "", { emitUpdate: false });
     isDirtyRef.current = false;
+    setHasLocalDraft(false);
+    remoteUpdateRef.current = null;
     setRemoteUpdate(null);
   }
 
   if (!editor || !loaded) return null;
 
  return (
-  <div className="min-h-screen bg-[#FAF8F3] px-10 py-6 pb-28">
-    <div className="flex items-center justify-between mb-8">
-      <div className="flex items-center gap-4">
+  <div className="min-h-screen bg-[#FAF8F3] px-3 py-4 pb-28 sm:px-6 sm:py-6 lg:px-10">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-4">
         <button
           onClick={() => navigate("/dashboard")}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white border border-black/5 text-sm text-[#1B1E2A]/80 shadow-sm hover:bg-black/[0.02] transition-colors"
@@ -228,12 +471,12 @@ export default function NotePage() {
           <ArrowLeft size={14} />
           Back
         </button>
-        <span className="text-sm text-[#1B1E2A]/40 font-mono tracking-tight">
+        <span className="truncate text-xs text-[#1B1E2A]/40 font-mono tracking-tight sm:text-sm">
           Notes / <span className="text-[#1B1E2A]/60">{title || "Untitled"}</span>
         </span>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
         <div className="flex items-center gap-1.5 text-sm text-[#1B1E2A]/50">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
@@ -253,14 +496,14 @@ export default function NotePage() {
       </div>
     </div>
 
-    <div className="flex items-start gap-6 px-5">
-      <div className="flex-1 min-w-0 pr-40">
-        <div className="flex items-center gap-3 mb-2">
+    <div className="flex items-start gap-6 px-0 lg:px-5">
+      <div className="min-w-0 flex-1">
+        <div className="mb-2 flex flex-wrap items-center gap-3">
           <input
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="Untitled"
-            className="font-serif text-[42px] leading-tight font-semibold text-[#1B1E2A] flex-1 min-w-0 bg-transparent outline-none placeholder:text-[#1B1E2A]/25"
+            className="min-w-0 flex-1 basis-full bg-transparent font-serif text-[30px] font-semibold leading-tight text-[#1B1E2A] outline-none placeholder:text-[#1B1E2A]/25 sm:basis-auto sm:text-[42px]"
           />
 
           <div className="flex items-center gap-2">
@@ -293,13 +536,22 @@ export default function NotePage() {
             <span>Last edited by {updatedByName || createdByName}</span>
           )}
           {remoteUpdate && (
-            <button
-              type="button"
-              onClick={loadRemoteUpdate}
-              className="rounded-full bg-[#F5D9A0] px-2 py-0.5 text-xs text-[#1B1E2A] hover:bg-[#EBC779]"
-            >
-              Load latest from {remoteUpdate.updatedBy?.name ?? "a collaborator"}
-            </button>
+            <>
+              {saveStatus === "error" && hasLocalDraft && (
+                <span role="alert" className="text-xs text-[#9A3E2E]">
+                  Your draft is still here. Copy it before loading latest; these edits could not
+                  be merged automatically.
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={loadRemoteUpdate}
+                className="rounded-full bg-[#F5D9A0] px-2 py-0.5 text-xs text-[#1B1E2A] hover:bg-[#EBC779]"
+              >
+                {hasLocalDraft ? "Discard my draft and load latest" : "Load latest"} from{" "}
+                {remoteUpdate.updatedBy?.name ?? "a collaborator"}
+              </button>
+            </>
           )}
           {aiAdded && (
             <span className="text-xs font-medium text-[#8A5A16] bg-[#F5D9A0] px-2 py-0.5 rounded-full">
@@ -310,11 +562,27 @@ export default function NotePage() {
 
         <div className="h-px bg-black/[0.06] mb-6" />
 
-        <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm px-8 py-6">
+        <div className="rounded-2xl border border-black/[0.06] bg-white px-3 py-3 shadow-sm sm:px-8 sm:py-6">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              void files.reduce(
+                (promise, file) => promise.then(() => insertUploadedImage(file)),
+                Promise.resolve(),
+              );
+              event.target.value = "";
+            }}
+          />
           <EditorContent
             editor={editor}
             className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
           />
+          {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}
         </div>
       </div>
 
@@ -328,7 +596,16 @@ export default function NotePage() {
       )}
     </div>
 
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#1B1E2A] rounded-full px-2 py-2 shadow-xl z-50">
+    {showStickyNotes && (
+      <PageStickyNotes
+        pageId={pageId}
+        currentUserId={currentUser?.id}
+        reloadKey={stickyNotesReloadKey}
+        onClose={() => setShowStickyNotes(false)}
+      />
+    )}
+
+    <div className="fixed bottom-3 left-1/2 z-50 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl bg-[#1B1E2A] px-2 py-2 shadow-xl sm:bottom-6 sm:rounded-full">
       <button
         onClick={() => editor.chain().focus().toggleBold().run()}
         className={`px-3 py-1.5 rounded-full text-sm ${
@@ -434,7 +711,7 @@ export default function NotePage() {
         </button>
 
         {linkOpen && (
-          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 bg-white rounded-xl border border-black/10 shadow-xl p-2">
+          <div className="fixed bottom-20 left-1/2 z-[60] mb-2 w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-2 shadow-xl">
             <input
               autoFocus
               value={linkQuery}
@@ -470,6 +747,64 @@ export default function NotePage() {
         )}
       </div>
 
+      <div className="relative">
+        <button
+          type="button"
+          title="Add external link"
+          aria-label="Add external link"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setExternalLinkOpen((open) => !open);
+            setLinkError("");
+          }}
+          className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+        >
+          <ExternalLink size={14} />
+        </button>
+        {externalLinkOpen && (
+          <form
+            className="fixed bottom-20 left-1/2 z-[60] w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-3 shadow-xl"
+            onSubmit={(event) => { event.preventDefault(); applyExternalLink(); }}
+          >
+            <label className="mb-1 block text-xs font-medium text-[#1B1E2A]/60" htmlFor="external-link-url">
+              Paste a web or email link
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="external-link-url"
+                autoFocus
+                value={externalLinkUrl}
+                onChange={(event) => setExternalLinkUrl(event.target.value)}
+                placeholder="https://example.com"
+                className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1.5 text-sm outline-none focus:border-[#D8A34D]"
+              />
+              <button type="submit" className="rounded-md bg-[#1B1E2A] px-3 text-sm text-white">Apply</button>
+            </div>
+            {linkError && <p role="alert" className="mt-2 text-xs text-red-700">{linkError}</p>}
+          </form>
+        )}
+      </div>
+
+      <button
+        type="button"
+        title="Add image"
+        aria-label="Add image"
+        onClick={() => imageInputRef.current?.click()}
+        className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+      >
+        <ImagePlus size={14} />
+      </button>
+      <button
+        type="button"
+        title="Sticky notes"
+        aria-label="Sticky notes"
+        onClick={() => setShowStickyNotes((open) => !open)}
+        className={`rounded-full px-3 py-1.5 text-sm ${
+          showStickyNotes ? "bg-[#E2A63B] text-[#1B1E2A]" : "text-white/80 hover:bg-white/10"
+        }`}
+      >
+        <StickyNoteIcon size={14} />
+      </button>
 
     </div>
   </div>

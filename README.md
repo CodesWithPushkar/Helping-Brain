@@ -12,6 +12,9 @@ Instead of searching through countless notes, Helping Brain allows you to organi
 - 📁 Workspace Management
 - 📂 Folder Organization
 - 📝 Rich Note Editor
+- 🔗 External links that open in a new tab
+- 🖼️ Persistent image upload and clipboard paste
+- 📌 Collaborative sticky notes with creator-only editing
 - 🤖 AI Search Across Notes
 - 🔍 Full-text Search
 - 🌙 Modern Minimal UI
@@ -184,9 +187,9 @@ Get `DATABASE_URL` from Neon and `OPENROUTER_API_KEY` from OpenRouter. `DATABASE
 
 Deploy Python first, prepare the Neon schema, then deploy Node and the static site. Verify Neon connectivity and authentication before sharing an invite link.
 
-For an existing Neon database that was originally synchronized with `prisma db push`, run `npx prisma db push` from `second-brain` once before deploying the Node service so the new collaboration tables and page attribution columns are added. Do not run `prisma migrate reset`. For a brand-new database with no schema, run `npx prisma migrate deploy` instead.
+For an existing Neon database that was originally synchronized with `prisma db push`, run `npx prisma db push` from `second-brain` once before deploying the Node service so the collaboration tables, page attribution/revision fields, page-image storage, and sticky-note tables are added. This is an additive schema update; it does not restore deleted rows. Do not run `prisma migrate reset`. For a brand-new database with no schema, run `npx prisma migrate deploy` instead.
 
-Workspace invite links do not expire and can be used by multiple Google-authenticated users until the owner revokes or replaces the link. Revoking the link prevents future joins; it does not remove members who already joined. Collaborators see saved updates live and the page's latest editor name; simultaneous typing/merge is not enabled, so avoid editing the same page at the same time.
+Workspace invite links do not expire and can be used by multiple Google-authenticated users until the owner revokes or replaces the link. Revoking the link prevents future joins; it does not remove members who already joined. Collaborators see saved updates live and the page's latest editor name. Non-overlapping text edits are merged when possible; conflicting edits are protected from silent overwrites and require the user to choose which version to load. Page images are stored in Neon as their original file, with a 5 MB per-image limit. Sticky notes are visible to page collaborators, but only the author can edit or delete each note.
 ---
 
 ## Roadmap

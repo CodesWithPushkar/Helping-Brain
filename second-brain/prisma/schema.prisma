@@ -8,92 +8,124 @@ datasource db {
 }
 
 model User {
-  id          Int      @id @default(autoincrement())
-  email       String   @unique
-  name        String
-  sub         String   @unique
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-  picture_url String
-  workspace   Workspace[]
+  id                    Int               @id @default(autoincrement())
+  email                 String            @unique
+  name                  String
+  sub                   String            @unique
+  created_at            DateTime          @default(now())
+  updated_at            DateTime          @updatedAt
+  picture_url           String
+  workspace             Workspace[]
   workspace_memberships WorkspaceMember[]
-  created_pages Page[] @relation("PageCreator")
-  edited_pages Page[] @relation("PageEditor")
+  created_pages         Page[]            @relation("PageCreator")
+  edited_pages          Page[]            @relation("PageEditor")
+  page_images           PageImage[]
+  sticky_notes          StickyNote[]
 }
 
 model Workspace {
-  id         Int      @id @default(autoincrement())
-  name       String
-  owner_id   Int
-  owner      User     @relation(fields: [owner_id], references: [id])
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-  pages      Page[]
-  members    WorkspaceMember[]
+  id          Int               @id @default(autoincrement())
+  name        String
+  owner_id    Int
+  owner       User              @relation(fields: [owner_id], references: [id])
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @updatedAt
+  pages       Page[]
+  members     WorkspaceMember[]
   invite_link WorkspaceInvite?
-  is_deleted Boolean @default(false)
-  
+  is_deleted  Boolean           @default(false)
+
   @@index([owner_id])
 }
 
 model WorkspaceMember {
   workspace_id Int
   user_id      Int
-  joined_at    DateTime @default(now())
+  joined_at    DateTime  @default(now())
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  user         User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@id([workspace_id, user_id])
   @@index([user_id])
 }
 
 model WorkspaceInvite {
-  workspace_id Int @id
-  token_hash   String @unique
-  created_at   DateTime @default(now())
+  workspace_id Int       @id
+  token_hash   String    @unique
+  created_at   DateTime  @default(now())
   workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 }
 
 model Page {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   title          String
   content        Json?
   icon           String
   color          String
   workspace_id   Int
-  workspace      Workspace @relation(fields: [workspace_id], references: [id])
+  workspace      Workspace    @relation(fields: [workspace_id], references: [id])
   parent_page_id Int?
-  parent         Page?    @relation("PageHierarchy", fields: [parent_page_id], references: [id])
-  children       Page[]   @relation("PageHierarchy")
+  parent         Page?        @relation("PageHierarchy", fields: [parent_page_id], references: [id])
+  children       Page[]       @relation("PageHierarchy")
   created_by_id  Int?
-  created_by     User?    @relation("PageCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  created_by     User?        @relation("PageCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
   updated_by_id  Int?
-  updated_by     User?    @relation("PageEditor", fields: [updated_by_id], references: [id], onDelete: SetNull)
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
-  is_deleted Boolean @default(false)
-  chat Chat[]
+  updated_by     User?        @relation("PageEditor", fields: [updated_by_id], references: [id], onDelete: SetNull)
+  revision       Int          @default(0)
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+  is_deleted     Boolean      @default(false)
+  chat           Chat[]
+  images         PageImage[]
+  sticky_notes   StickyNote[]
+
   @@index([workspace_id])
   @@index([parent_page_id])
 }
 
+model PageImage {
+  id            Int      @id @default(autoincrement())
+  page_id       Int
+  created_by_id Int
+  content_type  String
+  data          Bytes    @db.ByteA
+  created_at    DateTime @default(now())
+  page          Page     @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  created_by    User     @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+
+  @@index([page_id])
+}
+
+model StickyNote {
+  id            Int      @id @default(autoincrement())
+  page_id       Int
+  created_by_id Int
+  content       String   @db.VarChar(2000)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  page          Page     @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  created_by    User     @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+
+  @@index([page_id])
+}
+
 model Chat {
-  id           Int      @id @default(autoincrement())
-  title        String
-  page_id      Int
-  page         Page @relation(fields: [page_id], references: [id])
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
-  messages     ChatMessage[]
-  summary      String? @db.Text
-  last_summary_count Int @default(0)
+  id                 Int           @id @default(autoincrement())
+  title              String
+  page_id            Int
+  page               Page          @relation(fields: [page_id], references: [id])
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+  messages           ChatMessage[]
+  summary            String?       @db.Text
+  last_summary_count Int           @default(0)
 }
 
 model ChatMessage {
   id         Int      @id @default(autoincrement())
-  role       String   
+  role       String
   content    String
-  chat_id    Int  
-  chat       Chat @relation(fields: [chat_id], references: [id])
+  chat_id    Int
+  chat       Chat     @relation(fields: [chat_id], references: [id])
   created_at DateTime @default(now())
 }
