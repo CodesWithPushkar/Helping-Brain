@@ -241,6 +241,10 @@ const auth = (req:Request, res: Response, next:NextFunction) => {
     next();
 
   }catch(error){
+    console.warn(
+      'API authentication rejected:',
+      error instanceof Error ? error.message : 'Unknown token verification error',
+    );
     return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 
@@ -473,7 +477,8 @@ app.get("/api/workspace", auth, async (req, res) => {
       })),
     })
   }catch(error){
-    return res.status(401).json({ error: 'Internal server error' });
+    console.error('Workspace fetch failed:', error);
+    return res.status(500).json({ error: 'Unable to load workspace' });
   }
 });
 
