@@ -7,40 +7,54 @@ import AddButton from "../components/AddButton";
 import { useDashboard } from "../hooks/ContextApi/DashboardContex";
 import RecentNotesCard from "../components/RecentNotes";
 import { ICONS, type FolderIconName } from "../components/Form";
+import { Menu } from "lucide-react";
 
 type MainProps = {
   username: string;
   totalFolderCount: number;
+  onOpenSidebar: () => void;
 }
 
-const Main = ({username, totalFolderCount}: MainProps) => {
+const Main = ({username, totalFolderCount, onOpenSidebar}: MainProps) => {
 
   const { pages, setOpen, selectedWorkspace } = useDashboard();
   const recentPages = [...pages]
   .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   .slice(0, 6);
 
-  return <div className="bg-paper-dim h-full w-full overflow-y-auto">
-    <div className="flex flex-1 px-9 pt-7 pb-15 flex-col max-w-[1160px]">
+  return <main className="min-w-0 flex-1 overflow-y-auto bg-paper-dim">
+    <div className="mx-auto flex min-h-full w-full max-w-[1160px] flex-col px-4 pb-24 pt-5 sm:px-7 sm:pt-7 lg:px-9">
 
-      <MainNav workspaceName={selectedWorkspace?.title ?? ""}/>
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          aria-label="Open sidebar"
+          onClick={onOpenSidebar}
+          className="mt-0.5 rounded-lg border border-black/10 bg-white p-2 text-[#1B1E2A] shadow-sm md:hidden"
+        >
+          <Menu size={19} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <MainNav workspaceName={selectedWorkspace?.title ?? ""}/>
+        </div>
+      </div>
 
       
-      <span className="font-mono text-[#57536e] text-sm mb-1">Good afternoon, {username}</span>
-      <h1 className="text-[32px] font-serif mb-2">Your second brain, organised.</h1>
-      <span className="text-[14.5px] text-[#57536e]">
+      <span className="mb-1 font-mono text-sm text-[#57536e]">Good afternoon, {username}</span>
+      <h1 className="mb-2 font-serif text-[26px] leading-tight sm:text-[32px]">Your second brain, organised.</h1>
+      <div className="text-[14.5px] leading-relaxed text-[#57536e]">
         <p>Pick up a note, browse a folder, or ask across everything you've written —</p>
         <p>Helping Brain remembers what you don't.</p>
-      </span>
+      </div>
       
-      <SearchComponent className="my-8 p-4" icon={Sparkle} iconColor="black" placeholder="Ask across every note in this workspace ..." rightElement={<ButtonComponent title="Ask" className="bg-black"/>} />
+      <SearchComponent className="my-6 p-3 sm:my-8 sm:p-4" icon={Sparkle} iconColor="black" placeholder="Ask across every note in this workspace ..." rightElement={<ButtonComponent title="Ask" className="bg-black"/>} />
 
       <div className="flex justify-between">
           <h4 className="text-[15px] font-serif font-semibold tracking-wider mb-4">Notes</h4>
           <p className="text-[#57536e] font-mono text-[12.5px]">{totalFolderCount} total</p>
       </div>
 
-      <div className="flex gap-4 w-full flex-wrap" >
+      <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-4">
         {
           pages.slice(0,3).map((p) => (
             <FolderComponent
@@ -50,12 +64,12 @@ const Main = ({username, totalFolderCount}: MainProps) => {
               icon={ICONS[p.icon as FolderIconName]}
               childCount={p._count.children}
               color={p.color}
-              className={"flex-1"}
+              className={"h-full w-full"}
             />
           ))
         }
 
-        <AddButton title="+ Add Notes" className="w-[256px] bg-white border-none text-black hover:text-black" onClick={() => setOpen(true)}/>
+        <AddButton title="+ Add Notes" className="min-h-[72px] w-full bg-white border-none text-black hover:text-black" onClick={() => setOpen(true)}/>
       </div>
 
       <div className="flex justify-between mt-8">
@@ -63,7 +77,7 @@ const Main = ({username, totalFolderCount}: MainProps) => {
           <p className="text-[#57536e] font-mono text-[12.5px]">All Recent notes</p>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
       
       
         
@@ -83,7 +97,7 @@ const Main = ({username, totalFolderCount}: MainProps) => {
     </div>
 
     </div>
-  </div>
+  </main>
 }
 
 export default Main;

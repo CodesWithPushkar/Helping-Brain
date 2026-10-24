@@ -1,4 +1,5 @@
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { Menu } from "lucide-react";
 import Sidebar from "../layout/Sidebar";
 import { DashboardProvider, useDashboard } from "../hooks/ContextApi/DashboardContex";
 import Main from "../layout/Main";
@@ -9,6 +10,7 @@ import api, { apiOrigin } from "../api/axios";
 import { io } from "socket.io-client";
 
 const DashboardContent = () => {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const {
     isResizing,
     setIsResizing,
@@ -67,20 +69,47 @@ const DashboardContent = () => {
 
   return (
     <div 
-      className="flex h-screen w-full bg-sidebar overflow-hidden"
+      className="relative flex h-[100dvh] w-full overflow-hidden bg-sidebar"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp} 
     >
       
-      <Sidebar />
+      <Sidebar
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
 
       {loding ? (
-        <DashboardSkeleton />
+        <div className="relative min-w-0 flex-1">
+          <button
+            type="button"
+            aria-label="Open sidebar"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="absolute left-3 top-3 z-30 rounded-lg border border-black/10 bg-white p-2 text-[#1B1E2A] shadow-sm md:hidden"
+          >
+            <Menu size={20} />
+          </button>
+          <DashboardSkeleton />
+        </div>
       ) : error ? (
-        <DashboardError message={error} onRetry={fetchWorkspace}/>
+        <div className="relative min-w-0 flex-1">
+          <button
+            type="button"
+            aria-label="Open sidebar"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="absolute left-3 top-3 z-30 rounded-lg border border-black/10 bg-white p-2 text-[#1B1E2A] shadow-sm md:hidden"
+          >
+            <Menu size={20} />
+          </button>
+          <DashboardError message={error} onRetry={fetchWorkspace}/>
+        </div>
       ) : (
-        <Main username="Pushkar" totalFolderCount={3} />
+        <Main
+          username="Pushkar"
+          totalFolderCount={3}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
       )}
 
       {selectedWorkspace && (

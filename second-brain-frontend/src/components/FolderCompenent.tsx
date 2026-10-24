@@ -13,10 +13,12 @@ export type FolderComponentProps = {
 
 const FolderComponent = ({id, name, icon: Icon, childCount, color, className}: FolderComponentProps) => {
   const navigate = useNavigate();
-  return <button onClick={() => {
-    navigate(`/notes/${id}`)
-  }}>
-    <div className="w-64 flex gap-[15px] p-4 m-2px items-center border border-line cursor-pointer rounded-[15px] bg-white transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md">
+  return <button
+    type="button"
+    onClick={() => navigate(`/notes/${id}`)}
+    className="h-full w-full min-w-0 text-left"
+  >
+    <div className="flex h-full min-h-[72px] min-w-0 items-center gap-3 rounded-[15px] border border-line bg-white p-3 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md sm:gap-[15px] sm:p-4">
       <div className={"flex items-center justify-center"}>
         <div style={{backgroundColor: color}} className={cn(`flex h-[40px] w-[40px] items-center justify-center rounded-[7px] text-white`, className)}>
           <Icon/>
@@ -24,7 +26,7 @@ const FolderComponent = ({id, name, icon: Icon, childCount, color, className}: F
       </div>
       
       
-      <div className="flex flex-col justify-center">
+      <div className="flex min-w-0 flex-col justify-center">
         <h5 className="line-clamp-1 font-sans text-[14.5px] font-semibold leading-[1.35] text-ink">{name}</h5>
         <span className="flex-1 line-clamp-2 font-sans text-[12.8px] font-normal leading-[1.55] text-ink-soft">{childCount} notes</span>
       </div>

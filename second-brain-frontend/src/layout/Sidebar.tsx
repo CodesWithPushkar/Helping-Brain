@@ -1,4 +1,4 @@
-import { Search, Share2 } from "lucide-react";
+import { Search, Share2, X } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import Dropdown from "../components/Dropdown";
 import SearchComponent from "../components/SearchComponent";
@@ -13,7 +13,12 @@ import { getInitials, workspacePalette } from "../hooks/useEffect/useWorkspace";
 import { userDetails } from "../hooks/useEffect/useUser";
 import ShareWorkspaceModal from "../components/ShareWorkspaceModal";
 
-const Sidebar = () => {
+type SidebarProps = {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+};
+
+const Sidebar = ({ mobileOpen, onMobileClose }: SidebarProps) => {
   const [addWorkshop, setAddWorkshop] = useState<boolean>(false);
   const [shareWorkspace, setShareWorkspace] = useState(false);
   const user = userDetails().user;
@@ -45,14 +50,32 @@ const Sidebar = () => {
 
   return (
     <>
-      <div className="flex flex-col justify-between bg-sidebar overflow-hidden shrink-0 px-4 py-5 h-screen">
-    
-        <div 
-          className="flex flex-col" 
-          style={{ width: `${sidebarWidth}px` }}
-        >
-          <div className="px-2 pb-4 pt-1 flex items-center justify-center">
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          onClick={onMobileClose}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-w-[calc(100vw-3rem)] flex-col justify-between overflow-hidden bg-sidebar px-4 py-4 shadow-xl transition-transform duration-200 md:relative md:z-auto md:h-screen md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+        style={{ width: `${sidebarWidth}px` }}
+        aria-label="Workspace sidebar"
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <div className="flex items-center justify-between px-2 pb-4 pt-1">
             <h2 className="font-semibold text-white font-serif text-[17px]">Helping Brain</h2>
+            <button
+              type="button"
+              aria-label="Close sidebar"
+              onClick={onMobileClose}
+              className="rounded-full p-2 text-white/80 hover:bg-white/10 md:hidden"
+            >
+              <X size={18} />
+            </button>
           </div>
           
           {loding ? (
@@ -89,7 +112,7 @@ const Sidebar = () => {
               <div className="h-6 bg-white/10 rounded-md w-full"></div>
             </div>
           ) : (
-            <SideBarFolderComponent />
+            <SideBarFolderComponent onNavigate={onMobileClose} />
           )}
           
           <AddButton title="+ New Notes" className="mt-3" onClick={() => setOpen(true)} />
@@ -108,11 +131,11 @@ const Sidebar = () => {
           />
         </div>
 
-      </div>
+      </aside>
 
       <div
         onMouseDown={startResizing}
-        className={`w-1 cursor-col-resize transition-colors hover:bg-blue-400 ${
+        className={`hidden w-1 cursor-col-resize transition-colors hover:bg-blue-400 md:block ${
           isResizing ? "bg-blue-500" : "bg-zinc-200"
         }`}
       />
