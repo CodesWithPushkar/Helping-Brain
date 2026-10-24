@@ -74,6 +74,7 @@ export default function NotePage() {
   const baseTitleRef = useRef("");
   const expectedRevisionRef = useRef<number | null>(null);
   const remoteUpdateRef = useRef<PageUpdateEvent | null>(null);
+  const savedEditorSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const navigate = useNavigate();
   const [pages, setPages] = useState<PageOption[]>([]);
   const isDirtyRef = useRef(false);
@@ -85,10 +86,11 @@ export default function NotePage() {
       StarterKit.configure({
         codeBlock: false,
         link: {
-        openOnClick: true,
-        autolink: true,
-        linkOnPaste: true,
-        HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" },
+          openOnClick: true,
+          autolink: true,
+          linkOnPaste: true,
+          defaultProtocol: "https",
+          HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" },
         },
       }),
       CodeBlockLowlight.configure({ lowlight }),
@@ -300,19 +302,27 @@ export default function NotePage() {
       return;
     }
 
-    const chain = editor.chain().focus();
-    if (editor.state.selection.empty) {
+    const selection = savedEditorSelectionRef.current ?? editor.state.selection;
+    const chain = editor.chain().focus().setTextSelection(selection);
+    if (selection.from === selection.to) {
       chain.insertContent({
         type: "text",
         text: rawUrl,
         marks: [{ type: "link", attrs: { href } }],
       }).run();
     } else {
-      chain.extendMarkRange("link").setLink({ href }).run();
+      chain.setLink({ href }).run();
     }
+    savedEditorSelectionRef.current = null;
     setExternalLinkUrl("");
     setExternalLinkOpen(false);
     setLinkError("");
+  }
+
+  function saveEditorSelection() {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    savedEditorSelectionRef.current = { from, to };
   }
 
   function handleAddToNote(content: string) {
@@ -324,10 +334,13 @@ export default function NotePage() {
   }
 
   function insertPageLink(page: { id: number; title: string }) {
-    editor?.chain().focus().insertContent({
+    if (!editor) return;
+    const selection = savedEditorSelectionRef.current ?? editor.state.selection;
+    editor.chain().focus().setTextSelection(selection).insertContent({
       type: "pageLink",
       attrs: { pageId: page.id, title: page.title },
     }).run();
+    savedEditorSelectionRef.current = null;
     setLinkOpen(false);
     setLinkQuery("");
   }
@@ -704,6 +717,11 @@ export default function NotePage() {
 
       <div className="relative">
         <button
+          type="button"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            saveEditorSelection();
+          }}
           onClick={() => setLinkOpen((o) => !o)}
           className="px-3 py-1.5 rounded-full text-sm text-white/80 hover:bg-white/10"
         >
@@ -724,6 +742,8 @@ export default function NotePage() {
                 .filter((p) => p.title.toLowerCase().includes(linkQuery.toLowerCase()))
                 .map((p) => (
                   <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
                     key={p.id}
                     onClick={() => insertPageLink(p)}
                     className="text-left px-2 py-1.5 text-sm rounded-md hover:bg-black/5"
@@ -736,6 +756,8 @@ export default function NotePage() {
                 (p) => p.title.toLowerCase() === linkQuery.trim().toLowerCase()
               ) && (
                 <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => createAndLinkPage(linkQuery.trim())}
                   className="text-left px-2 py-1.5 text-sm rounded-md text-[#443F76] hover:bg-black/5"
                 >
@@ -752,7 +774,10 @@ export default function NotePage() {
           type="button"
           title="Add external link"
           aria-label="Add external link"
-          onMouseDown={(event) => event.preventDefault()}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            saveEditorSelection();
+          }}
           onClick={() => {
             setExternalLinkOpen((open) => !open);
             setLinkError("");
