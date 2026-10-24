@@ -1,0 +1,10 @@
+ALTER TABLE "PageSolution"
+ADD COLUMN "updated_by_id" INTEGER,
+ADD COLUMN "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE "PageSolution"
+ALTER COLUMN "updated_at" DROP DEFAULT;
+
+ALTER TABLE "PageSolution"
+ADD CONSTRAINT "PageSolution_updated_by_id_fkey"
+FOREIGN KEY ("updated_by_id") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

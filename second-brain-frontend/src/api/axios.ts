@@ -1,11 +1,17 @@
 import axios from "axios";
 
-const configuredApiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const configuredApiUrl = import.meta.env.DEV
+    ? ""
+    : import.meta.env.VITE_API_URL || "http://localhost:3000";
 const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, "");
-export const apiBaseUrl = /\/api$/i.test(normalizedApiUrl)
+export const apiBaseUrl = import.meta.env.DEV
+    ? "/api"
+    : /\/api$/i.test(normalizedApiUrl)
     ? normalizedApiUrl
     : `${normalizedApiUrl}/api`;
-export const apiOrigin = new URL(apiBaseUrl).origin;
+export const apiOrigin = import.meta.env.DEV
+    ? window.location.origin
+    : new URL(apiBaseUrl).origin;
 
 const api = axios.create({
     baseURL: apiBaseUrl,

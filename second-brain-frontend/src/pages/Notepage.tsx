@@ -18,6 +18,7 @@ import ButtonComponent from "../components/ButtonComponent";
 import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles, ExternalLink, ImagePlus, StickyNote as StickyNoteIcon, MessageCircle } from "lucide-react";
 import PageLinkNode from "../extension/PageLinkNode";
 import PageImageNode from "../extension/PageImageNode";
+import PageQuestionBlock from "../extension/PageQuestionBlock";
 import ChatSidebar from "../layout/ChatSideBar";
 import PageStickyNotes from "../components/PageStickyNotes";
 import PageQuestions from "../components/PageQuestions";
@@ -54,6 +55,7 @@ export default function NotePage() {
   const titleRef = useRef("");
   const [loaded, setLoaded] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [questionPickerOpen, setQuestionPickerOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
   const [externalLinkOpen, setExternalLinkOpen] = useState(false);
   const [externalLinkUrl, setExternalLinkUrl] = useState("");
@@ -100,6 +102,7 @@ export default function NotePage() {
       CodeBlockLowlight.configure({ lowlight }),
       PageLinkNode((pageId) => navigate(`/notes/${pageId}`)),
       PageImageNode,
+      PageQuestionBlock,
     ],
     content: "",
     editorProps: {
@@ -350,6 +353,17 @@ export default function NotePage() {
     setLinkQuery("");
   }
 
+  function insertQuestionBlock(questionId: number) {
+    if (!editor) return;
+    const selection = savedEditorSelectionRef.current ?? editor.state.selection;
+    editor.chain().focus().insertContentAt(selection, {
+      type: "pageQuestionBlock",
+      attrs: { pageId, questionId },
+    }).run();
+    savedEditorSelectionRef.current = null;
+    setQuestionPickerOpen(false);
+  }
+
   async function createAndLinkPage(newTitle: string) {
     const token = localStorage.getItem("token");
     const res = await api.post(
@@ -448,6 +462,7 @@ export default function NotePage() {
     socket.on("page:questions-changed", (event: { pageId: number }) => {
       if (String(event.pageId) === pageId) {
         setQuestionsReloadKey((key) => key + 1);
+        window.dispatchEvent(new CustomEvent("page:questions-changed", { detail: event }));
       }
     });
 
@@ -607,11 +622,6 @@ export default function NotePage() {
             className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
           />
           {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}
-          <PageQuestions
-            pageId={pageId}
-            currentUserId={currentUser?.id}
-            reloadKey={questionsReloadKey}
-          />
         </div>
       </div>
 
@@ -786,18 +796,28 @@ export default function NotePage() {
         type="button"
         title="Questions and solutions"
         aria-label="Questions and solutions"
-        onClick={() => {
-          document.getElementById("page-discussion-heading")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveEditorSelection();
         }}
+        onClick={() => setQuestionPickerOpen((open) => !open)}
         className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
       >
         <MessageCircle size={14} />
       </button>
 
     </div>
+    {questionPickerOpen && createPortal(
+      <div className="fixed bottom-20 left-1/2 z-[60] -translate-x-1/2">
+        <PageQuestions
+          pageId={pageId}
+          currentUserId={currentUser?.id}
+          reloadKey={questionsReloadKey}
+          onInsertQuestion={insertQuestionBlock}
+        />
+      </div>,
+      document.body,
+    )}
     {linkOpen && createPortal(
       <div className="fixed bottom-20 left-1/2 z-[60] mb-2 w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-2 shadow-xl">
         <input

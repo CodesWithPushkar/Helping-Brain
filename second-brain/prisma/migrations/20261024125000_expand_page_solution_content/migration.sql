@@ -1,0 +1,2 @@
+ALTER TABLE "PageSolution"
+ALTER COLUMN "content" TYPE TEXT;

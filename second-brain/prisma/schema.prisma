@@ -23,6 +23,7 @@ model User {
   sticky_notes          StickyNote[]
   asked_questions       PageQuestion[]
   submitted_solutions   PageSolution[]
+  edited_solutions      PageSolution[]   @relation("PageSolutionEditor")
 }
 
 model Workspace {
@@ -130,10 +131,13 @@ model PageSolution {
   id            Int          @id @default(autoincrement())
   question_id   Int
   created_by_id Int
-  content       String       @db.VarChar(5000)
+  updated_by_id Int?
+  content       String       @db.Text
   created_at    DateTime     @default(now())
+  updated_at    DateTime     @updatedAt
   question      PageQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
   created_by    User         @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  updated_by    User?        @relation("PageSolutionEditor", fields: [updated_by_id], references: [id], onDelete: SetNull)
 
   @@index([question_id])
 }

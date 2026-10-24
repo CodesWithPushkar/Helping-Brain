@@ -19,9 +19,12 @@ const port = Number(process.env.PORT ?? 3000);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, '../public')));
-const FRONTEND_URL = process.env.FRONTEND_URL;
+const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+const FRONTEND_URL = process.env.FRONTEND_URL ?? (
+  isProduction ? undefined : "http://localhost:5173"
+);
 if (!FRONTEND_URL) throw new Error('FATAL: FRONTEND_URL environment variable is missing.');
 
 const allowedOrigins = FRONTEND_URL
@@ -63,6 +66,14 @@ const discussionBlockSchema = z.object({
   content: z.string().trim().min(1).max(5000),
 });
 
+const solutionContentSchema = z.union([
+  z.string().max(1_000_000),
+  z.record(z.string(), z.unknown()).refine(
+    (content) => content.type === "doc" && JSON.stringify(content).length <= 1_000_000,
+    { message: "Solution content must be a valid editor document under 1 MB" },
+  ),
+]);
+
 const pageSchema = z.object({
   title: z.string().min(1, { message: "Title is required and cannot be empty" }),
   workspaceId: z.coerce.number().int(),
@@ -82,8 +93,12 @@ const chatSchema = z.object({
   page_id: z.coerce.number().int(),
 });
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
-const AI_SERVICE_TOKEN = process.env.AI_SERVICE_TOKEN;
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? (
+  isProduction ? undefined : "http://localhost:8000"
+);
+const AI_SERVICE_TOKEN = process.env.AI_SERVICE_TOKEN ?? (
+  isProduction ? undefined : "local-development"
+);
 
 if (!AI_SERVICE_URL) throw new Error('FATAL: AI_SERVICE_URL environment variable is missing.');
 if (!AI_SERVICE_TOKEN) throw new Error('FATAL: AI_SERVICE_TOKEN environment variable is missing.');
@@ -803,7 +818,10 @@ app.get("/api/page/:id/questions", auth, async (req, res) => {
         created_by: { select: { id: true, name: true } },
         solutions: {
           orderBy: { created_at: "asc" },
-          include: { created_by: { select: { id: true, name: true } } },
+          include: {
+            created_by: { select: { id: true, name: true } },
+            updated_by: { select: { id: true, name: true } },
+          },
         },
       },
     });
@@ -839,7 +857,12 @@ app.post("/api/page/:id/questions", auth, async (req, res) => {
       data: { page_id: page.id, created_by_id: user.id, content: result.data.content },
       include: {
         created_by: { select: { id: true, name: true } },
-        solutions: { include: { created_by: { select: { id: true, name: true } } } },
+        solutions: {
+          include: {
+            created_by: { select: { id: true, name: true } },
+            updated_by: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     io.to(`workspace:${page.workspace_id}`).emit("page:questions-changed", { pageId: page.id });
@@ -855,7 +878,7 @@ app.post("/api/page-questions/:id/solutions", auth, async (req, res) => {
   if (!email) return res.status(401).json({ error: "Unauthorized" });
   const questionId = Number(req.params.id);
   if (!Number.isInteger(questionId)) return res.status(400).json({ error: "Invalid question ID" });
-  const result = discussionBlockSchema.safeParse(req.body);
+  const result = z.object({ content: solutionContentSchema }).safeParse(req.body);
   if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
 
   try {
@@ -877,9 +900,14 @@ app.post("/api/page-questions/:id/solutions", auth, async (req, res) => {
       data: {
         question_id: question.id,
         created_by_id: user.id,
-        content: result.data.content,
+        content: typeof result.data.content === "string"
+          ? result.data.content
+          : JSON.stringify(result.data.content),
       },
-      include: { created_by: { select: { id: true, name: true } } },
+      include: {
+        created_by: { select: { id: true, name: true } },
+        updated_by: { select: { id: true, name: true } },
+      },
     });
     io.to(`workspace:${question.page.workspace_id}`).emit("page:questions-changed", {
       pageId: question.page_id,
@@ -888,6 +916,57 @@ app.post("/api/page-questions/:id/solutions", auth, async (req, res) => {
   } catch (error) {
     console.error("Page solution create failed:", error);
     return res.status(500).json({ error: "Unable to create solution" });
+  }
+});
+
+app.patch("/api/page-solutions/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const solutionId = Number(req.params.id);
+  if (!Number.isInteger(solutionId)) return res.status(400).json({ error: "Invalid solution ID" });
+  const result = z.object({ content: solutionContentSchema }).safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const solution = await prisma.pageSolution.findFirst({
+      where: {
+        id: solutionId,
+        question: {
+          page: {
+            is_deleted: false,
+            workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+          },
+        },
+      },
+      select: {
+        id: true,
+        question: { select: { page_id: true, page: { select: { workspace_id: true } } } },
+      },
+    });
+    if (!solution) return res.status(404).json({ error: "Solution not found" });
+
+    const updated = await prisma.pageSolution.update({
+      where: { id: solution.id },
+      data: {
+        content: typeof result.data.content === "string"
+          ? result.data.content
+          : JSON.stringify(result.data.content),
+        updated_by_id: user.id,
+      },
+      include: {
+        created_by: { select: { id: true, name: true } },
+        updated_by: { select: { id: true, name: true } },
+      },
+    });
+    io.to(`workspace:${solution.question.page.workspace_id}`).emit("page:questions-changed", {
+      pageId: solution.question.page_id,
+    });
+    return res.status(200).json({ solution: updated });
+  } catch (error) {
+    console.error("Page solution update failed:", error);
+    return res.status(500).json({ error: "Unable to update solution" });
   }
 });
 
@@ -903,7 +982,6 @@ app.delete("/api/page-questions/:id", auth, async (req, res) => {
     const question = await prisma.pageQuestion.findFirst({
       where: {
         id: questionId,
-        created_by_id: user.id,
         page: {
           is_deleted: false,
           workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
@@ -936,7 +1014,6 @@ app.delete("/api/page-solutions/:id", auth, async (req, res) => {
     const solution = await prisma.pageSolution.findFirst({
       where: {
         id: solutionId,
-        created_by_id: user.id,
         question: {
           page: {
             is_deleted: false,
