@@ -16,12 +16,15 @@ const FolderComponent = ({id, name, icon: Icon, childCount, color, className}: F
   return <button
     type="button"
     onClick={() => navigate(`/notes/${id}`)}
-    className="h-full w-full min-w-0 text-left"
+    className={cn("h-full w-full min-w-0 text-left", className)}
   >
     <div className="flex h-full min-h-[72px] min-w-0 items-center gap-3 rounded-[15px] border border-line bg-white p-3 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-md sm:gap-[15px] sm:p-4">
-      <div className={"flex items-center justify-center"}>
-        <div style={{backgroundColor: color}} className={cn(`flex h-[40px] w-[40px] items-center justify-center rounded-[7px] text-white`, className)}>
-          <Icon/>
+      <div className="flex shrink-0 items-center justify-center">
+        <div
+          style={{ backgroundColor: color }}
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm sm:h-12 sm:w-12"
+        >
+          <Icon size={22} strokeWidth={2.25} />
         </div>
       </div>
       

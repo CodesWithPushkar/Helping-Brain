@@ -108,7 +108,7 @@ const SearchComponent = ({
           ) : notes.length > 0 ? (
             <ul className="max-h-60 overflow-y-auto">
               {notes.map((note) => (
-                  <FolderComponent id={note.id.toString()} name={note.title} icon={ICONS[note.icon as FolderIconName]} className={`bg-${note.color} p-0 transition-none`} color={note.color}/>
+                  <FolderComponent id={note.id.toString()} name={note.title} icon={ICONS[note.icon as FolderIconName] ?? ICONS.Folder} color={note.color}/>
               ))}
             </ul>
           ) : (

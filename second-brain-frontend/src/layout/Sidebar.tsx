@@ -59,13 +59,13 @@ const Sidebar = ({ mobileOpen, onMobileClose }: SidebarProps) => {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-w-[calc(100vw-3rem)] flex-col justify-between overflow-hidden bg-sidebar px-4 py-4 shadow-xl transition-transform duration-200 md:relative md:z-auto md:h-screen md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 box-border flex h-[100dvh] max-w-[calc(100vw-3rem)] flex-col justify-between overflow-hidden bg-sidebar px-4 py-4 shadow-xl transition-transform duration-200 md:relative md:z-auto md:h-screen md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
         style={{ width: `${sidebarWidth}px` }}
         aria-label="Workspace sidebar"
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain">
           <div className="flex items-center justify-between px-2 pb-4 pt-1">
             <h2 className="font-semibold text-white font-serif text-[17px]">Helping Brain</h2>
             <button
