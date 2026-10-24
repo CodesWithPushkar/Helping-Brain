@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
@@ -715,100 +716,36 @@ export default function NotePage() {
         </select>
       )}
 
-      <div className="relative">
-        <button
-          type="button"
-          onMouseDown={(event) => {
-            event.preventDefault();
-            saveEditorSelection();
-          }}
-          onClick={() => setLinkOpen((o) => !o)}
-          className="px-3 py-1.5 rounded-full text-sm text-white/80 hover:bg-white/10"
-        >
-          <Link2 size={14} />
-        </button>
+      <button
+        type="button"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveEditorSelection();
+        }}
+        onClick={() => setLinkOpen((open) => !open)}
+        className="px-3 py-1.5 rounded-full text-sm text-white/80 hover:bg-white/10"
+        title="Link to a page"
+        aria-label="Link to a page"
+      >
+        <Link2 size={14} />
+      </button>
 
-        {linkOpen && (
-          <div className="fixed bottom-20 left-1/2 z-[60] mb-2 w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-2 shadow-xl">
-            <input
-              autoFocus
-              value={linkQuery}
-              onChange={(e) => setLinkQuery(e.target.value)}
-              placeholder="Search or create a page…"
-              className="w-full px-2 py-1.5 text-sm border border-black/10 rounded-md outline-none mb-2"
-            />
-            <div className="max-h-40 overflow-y-auto flex flex-col gap-0.5">
-              {pages
-                .filter((p) => p.title.toLowerCase().includes(linkQuery.toLowerCase()))
-                .map((p) => (
-                  <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    key={p.id}
-                    onClick={() => insertPageLink(p)}
-                    className="text-left px-2 py-1.5 text-sm rounded-md hover:bg-black/5"
-                  >
-                    {p.title}
-                  </button>
-                ))}
-
-              {linkQuery.trim() && !pages.some(
-                (p) => p.title.toLowerCase() === linkQuery.trim().toLowerCase()
-              ) && (
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => createAndLinkPage(linkQuery.trim())}
-                  className="text-left px-2 py-1.5 text-sm rounded-md text-[#443F76] hover:bg-black/5"
-                >
-                  + Create "{linkQuery.trim()}"
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="relative">
-        <button
-          type="button"
-          title="Add external link"
-          aria-label="Add external link"
-          onMouseDown={(event) => {
-            event.preventDefault();
-            saveEditorSelection();
-          }}
-          onClick={() => {
-            setExternalLinkOpen((open) => !open);
-            setLinkError("");
-          }}
-          className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
-        >
-          <ExternalLink size={14} />
-        </button>
-        {externalLinkOpen && (
-          <form
-            className="fixed bottom-20 left-1/2 z-[60] w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-3 shadow-xl"
-            onSubmit={(event) => { event.preventDefault(); applyExternalLink(); }}
-          >
-            <label className="mb-1 block text-xs font-medium text-[#1B1E2A]/60" htmlFor="external-link-url">
-              Paste a web or email link
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="external-link-url"
-                autoFocus
-                value={externalLinkUrl}
-                onChange={(event) => setExternalLinkUrl(event.target.value)}
-                placeholder="https://example.com"
-                className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1.5 text-sm outline-none focus:border-[#D8A34D]"
-              />
-              <button type="submit" className="rounded-md bg-[#1B1E2A] px-3 text-sm text-white">Apply</button>
-            </div>
-            {linkError && <p role="alert" className="mt-2 text-xs text-red-700">{linkError}</p>}
-          </form>
-        )}
-      </div>
+      <button
+        type="button"
+        title="Add external link"
+        aria-label="Add external link"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          saveEditorSelection();
+        }}
+        onClick={() => {
+          setExternalLinkOpen((open) => !open);
+          setLinkError("");
+        }}
+        className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+      >
+        <ExternalLink size={14} />
+      </button>
 
       <button
         type="button"
@@ -832,6 +769,70 @@ export default function NotePage() {
       </button>
 
     </div>
+    {linkOpen && createPortal(
+      <div className="fixed bottom-20 left-1/2 z-[60] mb-2 w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-2 shadow-xl">
+        <input
+          autoFocus
+          value={linkQuery}
+          onChange={(event) => setLinkQuery(event.target.value)}
+          placeholder="Search or create a page…"
+          aria-label="Search or create a page"
+          className="mb-2 w-full rounded-md border border-black/10 px-2 py-1.5 text-sm outline-none"
+        />
+        <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto">
+          {pages
+            .filter((page) => page.title.toLowerCase().includes(linkQuery.toLowerCase()))
+            .map((page) => (
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                key={page.id}
+                onClick={() => insertPageLink(page)}
+                className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-black/5"
+              >
+                {page.title}
+              </button>
+            ))}
+
+          {linkQuery.trim() && !pages.some(
+            (page) => page.title.toLowerCase() === linkQuery.trim().toLowerCase()
+          ) && (
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => createAndLinkPage(linkQuery.trim())}
+              className="rounded-md px-2 py-1.5 text-left text-sm text-[#443F76] hover:bg-black/5"
+            >
+              + Create "{linkQuery.trim()}"
+            </button>
+          )}
+        </div>
+      </div>,
+      document.body,
+    )}
+    {externalLinkOpen && createPortal(
+      <form
+        className="fixed bottom-20 left-1/2 z-[60] w-[min(20rem,calc(100vw-1rem))] -translate-x-1/2 rounded-xl border border-black/10 bg-white p-3 shadow-xl"
+        onSubmit={(event) => { event.preventDefault(); applyExternalLink(); }}
+      >
+        <label className="mb-1 block text-xs font-medium text-[#1B1E2A]/60" htmlFor="external-link-url">
+          Paste a web or email link
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="external-link-url"
+            autoFocus
+            value={externalLinkUrl}
+            onChange={(event) => setExternalLinkUrl(event.target.value)}
+            placeholder="https://example.com"
+            className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1.5 text-sm outline-none focus:border-[#D8A34D]"
+          />
+          <button type="submit" className="rounded-md bg-[#1B1E2A] px-3 text-sm text-white">Apply</button>
+        </div>
+        {linkError && <p role="alert" className="mt-2 text-xs text-red-700">{linkError}</p>}
+      </form>,
+      document.body,
+    )}
   </div>
 );
 }
