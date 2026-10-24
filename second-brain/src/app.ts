@@ -891,6 +891,79 @@ app.post("/api/page-questions/:id/solutions", auth, async (req, res) => {
   }
 });
 
+app.delete("/api/page-questions/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const questionId = Number(req.params.id);
+  if (!Number.isInteger(questionId)) return res.status(400).json({ error: "Invalid question ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const question = await prisma.pageQuestion.findFirst({
+      where: {
+        id: questionId,
+        created_by_id: user.id,
+        page: {
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+      },
+      select: { id: true, page_id: true, page: { select: { workspace_id: true } } },
+    });
+    if (!question) return res.status(404).json({ error: "Question not found" });
+
+    await prisma.pageQuestion.delete({ where: { id: question.id } });
+    io.to(`workspace:${question.page.workspace_id}`).emit("page:questions-changed", {
+      pageId: question.page_id,
+    });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Page question delete failed:", error);
+    return res.status(500).json({ error: "Unable to delete question" });
+  }
+});
+
+app.delete("/api/page-solutions/:id", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const solutionId = Number(req.params.id);
+  if (!Number.isInteger(solutionId)) return res.status(400).json({ error: "Invalid solution ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const solution = await prisma.pageSolution.findFirst({
+      where: {
+        id: solutionId,
+        created_by_id: user.id,
+        question: {
+          page: {
+            is_deleted: false,
+            workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+          },
+        },
+      },
+      select: {
+        id: true,
+        question: {
+          select: { page_id: true, page: { select: { workspace_id: true } } },
+        },
+      },
+    });
+    if (!solution) return res.status(404).json({ error: "Solution not found" });
+
+    await prisma.pageSolution.delete({ where: { id: solution.id } });
+    io.to(`workspace:${solution.question.page.workspace_id}`).emit("page:questions-changed", {
+      pageId: solution.question.page_id,
+    });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Page solution delete failed:", error);
+    return res.status(500).json({ error: "Unable to delete solution" });
+  }
+});
+
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 app.post(

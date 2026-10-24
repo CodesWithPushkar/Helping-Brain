@@ -607,8 +607,12 @@ export default function NotePage() {
             className="prose prose-neutral max-w-none focus:outline-none min-h-[300px]"
           />
           {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}
+          <PageQuestions
+            pageId={pageId}
+            currentUserId={currentUser?.id}
+            reloadKey={questionsReloadKey}
+          />
         </div>
-        <PageQuestions pageId={pageId} reloadKey={questionsReloadKey} />
       </div>
 
       {showChatSidebar && (

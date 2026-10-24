@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { MessageCircle, Plus, Send } from "lucide-react";
+import { MessageCircle, Plus, Send, Trash2 } from "lucide-react";
 import api from "../api/axios";
 
 type Author = { id: number; name: string };
@@ -19,10 +19,11 @@ type Question = {
 
 type PageQuestionsProps = {
   pageId: string;
+  currentUserId?: number;
   reloadKey: number;
 };
 
-export default function PageQuestions({ pageId, reloadKey }: PageQuestionsProps) {
+export default function PageQuestions({ pageId, currentUserId, reloadKey }: PageQuestionsProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionDraft, setQuestionDraft] = useState("");
   const [solutionDrafts, setSolutionDrafts] = useState<Record<number, string>>({});
@@ -95,10 +96,44 @@ export default function PageQuestions({ pageId, reloadKey }: PageQuestionsProps)
     }
   }
 
+  async function deleteQuestion(question: Question) {
+    if (!window.confirm("Delete this question and all its solutions?")) return;
+    setBusyKey(`delete-question-${question.id}`);
+    try {
+      const token = localStorage.getItem("token");
+      await api.delete(`/page-questions/${question.id}`, {
+        headers: { Authorization: token },
+      });
+      await loadQuestions();
+    } catch (deleteError) {
+      console.error("Page question delete failed:", deleteError);
+      setError("Could not delete this question. Please try again.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function deleteSolution(solution: Solution) {
+    if (!window.confirm("Delete this solution?")) return;
+    setBusyKey(`delete-solution-${solution.id}`);
+    try {
+      const token = localStorage.getItem("token");
+      await api.delete(`/page-solutions/${solution.id}`, {
+        headers: { Authorization: token },
+      });
+      await loadQuestions();
+    } catch (deleteError) {
+      console.error("Page solution delete failed:", deleteError);
+      setError("Could not delete this solution. Please try again.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <section
       aria-labelledby="page-discussion-heading"
-      className="mt-6 rounded-2xl border border-black/[0.07] bg-white p-4 shadow-sm sm:p-6"
+      className="mt-6 border-t border-black/[0.08] pt-5 sm:mt-8 sm:pt-6"
     >
       <div className="mb-4 flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F5E7C7] text-[#74501C]">
@@ -127,10 +162,24 @@ export default function PageQuestions({ pageId, reloadKey }: PageQuestionsProps)
             <article key={question.id} className="rounded-xl border border-[#E9E3D7] bg-[#FCFBF8] p-3 sm:p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-[#8A641F]">Question</span>
-                <span className="text-xs text-[#57536e]">
-                  Asked by <strong>{question.created_by.name}</strong>
-                  {" · "}{new Date(question.created_at).toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#57536e]">
+                    Asked by <strong>{question.created_by.name}</strong>
+                    {" · "}{new Date(question.created_at).toLocaleString()}
+                  </span>
+                  {question.created_by.id === currentUserId && (
+                    <button
+                      type="button"
+                      aria-label="Delete question"
+                      title="Delete question and its solutions"
+                      disabled={busyKey === `delete-question-${question.id}`}
+                      onClick={() => void deleteQuestion(question)}
+                      className="rounded-md p-1.5 text-[#9A3E2E] hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#1B1E2A]">
                 {question.content}
@@ -141,10 +190,24 @@ export default function PageQuestions({ pageId, reloadKey }: PageQuestionsProps)
                   <div key={solution.id} className="rounded-lg bg-white p-3">
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <span className="text-xs font-semibold uppercase tracking-wide text-[#3F756A]">Solution</span>
-                      <span className="text-xs text-[#57536e]">
-                        By <strong>{solution.created_by.name}</strong>
-                        {" · "}{new Date(solution.created_at).toLocaleString()}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[#57536e]">
+                          By <strong>{solution.created_by.name}</strong>
+                          {" · "}{new Date(solution.created_at).toLocaleString()}
+                        </span>
+                        {solution.created_by.id === currentUserId && (
+                          <button
+                            type="button"
+                            aria-label="Delete solution"
+                            title="Delete solution"
+                            disabled={busyKey === `delete-solution-${solution.id}`}
+                            onClick={() => void deleteSolution(solution)}
+                            className="rounded-md p-1.5 text-[#9A3E2E] hover:bg-red-50 disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#1B1E2A]">
                       {solution.content}
