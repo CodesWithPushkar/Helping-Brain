@@ -80,7 +80,7 @@ const SearchComponent = ({
     <div className="relative w-full">
       <div
         className={cn(
-          `flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 ${bgColor} border-none`,
+          `flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 sm:flex-nowrap ${bgColor} border-none`,
           className,
           isWorkspaceLocked && "opacity-70"
         )}
@@ -88,14 +88,18 @@ const SearchComponent = ({
         {Icon && <Icon size={18} className="shrink-0" color={iconColor} />}
 
         <input
-          className={`flex-1 bg-transparent outline-none placeholder:font-sans placeholder:text-[14px] placeholder:${placeholderTextColor} placeholder:font-normal ${iconColor}`}
+          className={`min-w-0 flex-1 basis-0 bg-transparent outline-none placeholder:font-sans placeholder:text-[14px] placeholder:${placeholderTextColor} placeholder:font-normal ${iconColor}`}
           placeholder={isWorkspaceLocked ? "Create a workspace to start searching" : placeholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           disabled={isWorkspaceLocked}
         />
 
-        {rightElement}
+        {rightElement && (
+          <div className="w-full shrink-0 sm:w-auto [&>button]:w-full sm:[&>button]:w-auto">
+            {rightElement}
+          </div>
+        )}
       </div>
 
       {!isWorkspaceLocked && search.trim() && (

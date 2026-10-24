@@ -21,6 +21,8 @@ model User {
   edited_pages          Page[]            @relation("PageEditor")
   page_images           PageImage[]
   sticky_notes          StickyNote[]
+  asked_questions       PageQuestion[]
+  submitted_solutions   PageSolution[]
 }
 
 model Workspace {
@@ -78,6 +80,7 @@ model Page {
   chat           Chat[]
   images         PageImage[]
   sticky_notes   StickyNote[]
+  questions      PageQuestion[]
 
   @@index([workspace_id])
   @@index([parent_page_id])
@@ -107,6 +110,32 @@ model StickyNote {
   created_by    User     @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
 
   @@index([page_id])
+}
+
+model PageQuestion {
+  id            Int            @id @default(autoincrement())
+  page_id       Int
+  created_by_id Int
+  content       String         @db.VarChar(5000)
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  page          Page           @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  created_by    User           @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  solutions     PageSolution[]
+
+  @@index([page_id])
+}
+
+model PageSolution {
+  id            Int          @id @default(autoincrement())
+  question_id   Int
+  created_by_id Int
+  content       String       @db.VarChar(5000)
+  created_at    DateTime     @default(now())
+  question      PageQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  created_by    User         @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+
+  @@index([question_id])
 }
 
 model Chat {

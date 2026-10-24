@@ -15,11 +15,12 @@ import api from "../api/axios";
 import "../editor.css";
 import { useParams, useNavigate } from "react-router-dom";
 import ButtonComponent from "../components/ButtonComponent";
-import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles, ExternalLink, ImagePlus, StickyNote as StickyNoteIcon } from "lucide-react";
+import { Trash2, ArrowLeft, MoreVertical, Bold, Code2, Quote, Italic, List, ListOrdered, Link2, Sparkles, ExternalLink, ImagePlus, StickyNote as StickyNoteIcon, MessageCircle } from "lucide-react";
 import PageLinkNode from "../extension/PageLinkNode";
 import PageImageNode from "../extension/PageImageNode";
 import ChatSidebar from "../layout/ChatSideBar";
 import PageStickyNotes from "../components/PageStickyNotes";
+import PageQuestions from "../components/PageQuestions";
 import { markdownToTiptapHTML } from "../Markdowntotiptap";
 import { io } from "socket.io-client";
 import { apiOrigin } from "../api/axios";
@@ -58,6 +59,7 @@ export default function NotePage() {
   const [externalLinkUrl, setExternalLinkUrl] = useState("");
   const [showStickyNotes, setShowStickyNotes] = useState(false);
   const [stickyNotesReloadKey, setStickyNotesReloadKey] = useState(0);
+  const [questionsReloadKey, setQuestionsReloadKey] = useState(0);
   const [imageError, setImageError] = useState("");
   const [linkError, setLinkError] = useState("");
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +76,7 @@ export default function NotePage() {
   const baseContentRef = useRef<JSONContent | null>(null);
   const baseTitleRef = useRef("");
   const expectedRevisionRef = useRef<number | null>(null);
+  const editVersionRef = useRef(0);
   const remoteUpdateRef = useRef<PageUpdateEvent | null>(null);
   const savedEditorSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const navigate = useNavigate();
@@ -113,6 +116,7 @@ export default function NotePage() {
     onUpdate: () => {
       if (!isDirtyRef.current) setHasLocalDraft(true);
       isDirtyRef.current = true;
+      editVersionRef.current += 1;
       scheduleSave(title);
     },
   });
@@ -165,6 +169,7 @@ export default function NotePage() {
         titleRef.current = mergedTitle;
       }
 
+      const editVersionAtSave = editVersionRef.current;
       try {
         const response = await api.patch(
           `/page/${pageId}`,
@@ -186,9 +191,7 @@ export default function NotePage() {
           remoteUpdateRef.current = null;
           setRemoteUpdate(null);
         }
-        isDirtyRef.current =
-          JSON.stringify(editor?.getJSON()) !== JSON.stringify(savedPage.content) ||
-          titleRef.current !== savedPage.title;
+        isDirtyRef.current = editVersionRef.current !== editVersionAtSave;
         setHasLocalDraft(isDirtyRef.current);
         setUpdatedByName(response.data.page.updated_by?.name ?? currentUser?.name ?? "");
         if (
@@ -248,6 +251,7 @@ export default function NotePage() {
   function handleTitleChange(value: string) {
     if (!isDirtyRef.current) setHasLocalDraft(true);
     isDirtyRef.current = true;
+    editVersionRef.current += 1;
     setTitle(value);
     titleRef.current = value;
     scheduleSave(value);
@@ -441,6 +445,12 @@ export default function NotePage() {
       }
     });
 
+    socket.on("page:questions-changed", (event: { pageId: number }) => {
+      if (String(event.pageId) === pageId) {
+        setQuestionsReloadKey((key) => key + 1);
+      }
+    });
+
     socket.on("page:deleted", (event: { pageId: number }) => {
       if (String(event.pageId) === pageId) navigate("/dashboard", { replace: true });
     });
@@ -598,6 +608,7 @@ export default function NotePage() {
           />
           {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}
         </div>
+        <PageQuestions pageId={pageId} reloadKey={questionsReloadKey} />
       </div>
 
       {showChatSidebar && (
@@ -766,6 +777,20 @@ export default function NotePage() {
         }`}
       >
         <StickyNoteIcon size={14} />
+      </button>
+      <button
+        type="button"
+        title="Questions and solutions"
+        aria-label="Questions and solutions"
+        onClick={() => {
+          document.getElementById("page-discussion-heading")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }}
+        className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+      >
+        <MessageCircle size={14} />
       </button>
 
     </div>

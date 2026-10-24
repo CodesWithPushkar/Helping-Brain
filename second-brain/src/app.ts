@@ -59,6 +59,10 @@ const stickyNoteSchema = z.object({
   content: z.string().trim().min(1).max(2000),
 });
 
+const discussionBlockSchema = z.object({
+  content: z.string().trim().min(1).max(5000),
+});
+
 const pageSchema = z.object({
   title: z.string().min(1, { message: "Title is required and cannot be empty" }),
   workspaceId: z.coerce.number().int(),
@@ -770,6 +774,120 @@ app.delete("/api/sticky-notes/:id", auth, async (req, res) => {
   } catch (error) {
     console.error("Sticky note delete failed:", error);
     return res.status(500).json({ error: "Unable to delete sticky note" });
+  }
+});
+
+app.get("/api/page/:id/questions", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const pageId = Number(req.params.id);
+  if (!Number.isInteger(pageId)) return res.status(400).json({ error: "Invalid page ID" });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const page = await prisma.page.findFirst({
+      where: {
+        id: pageId,
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
+      select: { id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
+    const questions = await prisma.pageQuestion.findMany({
+      where: { page_id: page.id },
+      orderBy: { created_at: "asc" },
+      include: {
+        created_by: { select: { id: true, name: true } },
+        solutions: {
+          orderBy: { created_at: "asc" },
+          include: { created_by: { select: { id: true, name: true } } },
+        },
+      },
+    });
+    return res.status(200).json({ questions });
+  } catch (error) {
+    console.error("Page questions fetch failed:", error);
+    return res.status(500).json({ error: "Unable to load page questions" });
+  }
+});
+
+app.post("/api/page/:id/questions", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const pageId = Number(req.params.id);
+  if (!Number.isInteger(pageId)) return res.status(400).json({ error: "Invalid page ID" });
+  const result = discussionBlockSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const page = await prisma.page.findFirst({
+      where: {
+        id: pageId,
+        is_deleted: false,
+        workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+      },
+      select: { id: true, workspace_id: true },
+    });
+    if (!page) return res.status(404).json({ error: "Page not found" });
+
+    const question = await prisma.pageQuestion.create({
+      data: { page_id: page.id, created_by_id: user.id, content: result.data.content },
+      include: {
+        created_by: { select: { id: true, name: true } },
+        solutions: { include: { created_by: { select: { id: true, name: true } } } },
+      },
+    });
+    io.to(`workspace:${page.workspace_id}`).emit("page:questions-changed", { pageId: page.id });
+    return res.status(201).json({ question });
+  } catch (error) {
+    console.error("Page question create failed:", error);
+    return res.status(500).json({ error: "Unable to create question" });
+  }
+});
+
+app.post("/api/page-questions/:id/solutions", auth, async (req, res) => {
+  const email = req.email;
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const questionId = Number(req.params.id);
+  if (!Number.isInteger(questionId)) return res.status(400).json({ error: "Invalid question ID" });
+  const result = discussionBlockSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.issues[0]?.message });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const question = await prisma.pageQuestion.findFirst({
+      where: {
+        id: questionId,
+        page: {
+          is_deleted: false,
+          workspace: { is_deleted: false, ...workspaceAccessFilter(user.id) },
+        },
+      },
+      select: { id: true, page_id: true, page: { select: { workspace_id: true } } },
+    });
+    if (!question) return res.status(404).json({ error: "Question not found" });
+
+    const solution = await prisma.pageSolution.create({
+      data: {
+        question_id: question.id,
+        created_by_id: user.id,
+        content: result.data.content,
+      },
+      include: { created_by: { select: { id: true, name: true } } },
+    });
+    io.to(`workspace:${question.page.workspace_id}`).emit("page:questions-changed", {
+      pageId: question.page_id,
+    });
+    return res.status(201).json({ solution });
+  } catch (error) {
+    console.error("Page solution create failed:", error);
+    return res.status(500).json({ error: "Unable to create solution" });
   }
 });
 
